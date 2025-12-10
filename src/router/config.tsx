@@ -1,10 +1,9 @@
 import { lazy } from 'react';
-import { RouteObject } from 'react-router-dom';
+import { RouteObject, Navigate } from 'react-router-dom';
 
 const Home = lazy(() => import('../pages/home/page'));
 const Login = lazy(() => import('../pages/login/page'));
 const SuperLogin = lazy(() => import('../pages/super-login/page'));
-const Dashboard = lazy(() => import('../pages/dashboard/page'));
 const Attendance = lazy(() => import('../pages/attendance/page'));
 const Reports = lazy(() => import('../pages/reports/page'));
 const Admin = lazy(() => import('../pages/admin/page'));
@@ -25,7 +24,7 @@ const routes: RouteObject[] = [
   },
   {
     path: '/dashboard',
-    element: <Dashboard />,
+    element: <Navigate to="/attendance" replace />,
   },
   {
     path: '/attendance',

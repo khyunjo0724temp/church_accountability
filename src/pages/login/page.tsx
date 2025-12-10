@@ -58,7 +58,7 @@ export default function Login() {
         if (formData.rememberDevice) {
           localStorage.setItem('remember_device', 'true');
         }
-        navigate('/dashboard');
+        navigate('/attendance');
       } else {
         // 회원가입 로직
         // 1. 전화번호 중복 확인

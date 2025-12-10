@@ -246,18 +246,25 @@ export default function Reports() {
               />
               <h1 className="text-xl font-bold text-gray-800">리포트</h1>
             </div>
+            <div className="flex items-center space-x-6">
+              <button
+                onClick={() => navigate('/attendance')}
+                className="text-sm font-medium text-gray-600 hover:text-gray-800 cursor-pointer whitespace-nowrap"
+              >
+                출석 체크
+              </button>
+              <button
+                onClick={() => navigate('/reports')}
+                className="text-sm font-medium text-teal-600 border-b-2 border-teal-600 pb-1 cursor-pointer whitespace-nowrap"
+              >
+                리포트 조회
+              </button>
+            </div>
           </div>
         </div>
       </nav>
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <button
-          onClick={() => navigate('/dashboard')}
-          className="flex items-center space-x-2 text-gray-600 hover:text-gray-800 mb-4 cursor-pointer"
-        >
-          <i className="ri-arrow-left-line text-xl"></i>
-          <span className="text-sm font-medium">뒤로가기</span>
-        </button>
 
         <div className="bg-white rounded-xl shadow-md p-6 mb-6">
           <div className="flex items-center justify-start space-x-2 mb-6">
