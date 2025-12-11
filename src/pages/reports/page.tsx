@@ -24,6 +24,7 @@ export default function Reports() {
   const navigate = useNavigate();
   const [period, setPeriod] = useState<'week' | 'month' | 'year'>('week');
   const [reportData, setReportData] = useState<ReportData | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   function getThisSunday(): Date {
     const today = new Date();
@@ -204,9 +205,18 @@ export default function Reports() {
       // 점수를 배열로 변환하고 정렬
       const perUserPoints = Array.from(pointsMap.entries()).map(([userId, points]) => {
         const member = membersData?.find(m => m.id === userId);
+        let userName = '알 수 없음';
+
+        if (member) {
+          userName = member.name;
+        } else if (userId === user.id) {
+          // members에 없으면 팀장(로그인한 사용자)인지 확인
+          userName = user.name;
+        }
+
         return {
           user_id: userId,
-          name: member?.name || '알 수 없음',
+          name: userName,
           points: points
         };
       }).sort((a, b) => b.points - a.points);
@@ -233,181 +243,274 @@ export default function Reports() {
     alert('CSV 내보내기 기능은 곧 제공됩니다');
   };
 
+  const totalPoints = period === 'week' ? (reportData?.totals?.weeklyPoints || 0) :
+    period === 'month' ? (reportData?.totals?.monthlyPoints || 0) :
+    (reportData?.totals?.weeklyPoints || 0);
+
   return (
-    <div className="min-h-screen bg-gradient-to-br from-teal-50 via-white to-blue-50">
-      <nav className="bg-white shadow-sm border-b border-gray-200">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center h-16">
-            <div className="flex items-center space-x-3">
-              <img
-                src="https://public.readdy.ai/ai/img_res/6f5f4709-4636-4b57-8f60-15ce4bfa71df.png"
-                alt="로고"
-                className="h-10 w-auto object-contain"
-              />
-              <h1 className="text-xl font-bold text-gray-800">리포트</h1>
-            </div>
-            <div className="flex items-center space-x-6">
-              <button
-                onClick={() => navigate('/attendance')}
-                className="text-sm font-medium text-gray-600 hover:text-gray-800 cursor-pointer whitespace-nowrap"
-              >
-                출석 체크
-              </button>
-              <button
-                onClick={() => navigate('/reports')}
-                className="text-sm font-medium text-teal-600 border-b-2 border-teal-600 pb-1 cursor-pointer whitespace-nowrap"
-              >
-                리포트 조회
-              </button>
-            </div>
+    <div className="min-h-screen bg-page">
+      {/* 헤더 */}
+      <nav className="bg-white border-b border-gray-200">
+        <div className="max-w-md mx-auto px-5 h-14 flex items-center justify-between">
+          <div className="flex items-center space-x-2">
+            <img
+              src="https://public.readdy.ai/ai/img_res/6f5f4709-4636-4b57-8f60-15ce4bfa71df.png"
+              alt="로고"
+              className="h-7 w-auto object-contain"
+            />
+            <h1 className="text-lg font-bold text-gray-900">리포트</h1>
           </div>
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+          >
+            <i className="ri-menu-line text-xl text-gray-700"></i>
+          </button>
         </div>
       </nav>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      {/* Sidebar Overlay */}
+      {sidebarOpen && (
+        <div
+          className="fixed inset-0 bg-black bg-opacity-50 z-40"
+          onClick={() => setSidebarOpen(false)}
+        ></div>
+      )}
 
-        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-          <div className="flex items-center justify-start space-x-2 mb-6">
+      {/* Sidebar */}
+      <div
+        className={`fixed top-0 right-0 h-full w-64 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
+          sidebarOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-lg font-bold text-gray-900">메뉴</h2>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="p-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
+            >
+              <i className="ri-close-line text-2xl text-gray-900"></i>
+            </button>
+          </div>
+
+          <div className="space-y-2">
+            <button
+              onClick={() => {
+                navigate('/attendance');
+                setSidebarOpen(false);
+              }}
+              className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-medium cursor-pointer whitespace-nowrap transition-colors"
+            >
+              <i className="ri-checkbox-circle-line text-xl text-gray-600"></i>
+              <span className="text-gray-900">출석 체크</span>
+            </button>
+            <button
+              onClick={() => {
+                navigate('/reports');
+                setSidebarOpen(false);
+              }}
+              className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors"
+              style={{ backgroundColor: '#1E88E5', color: 'white' }}
+            >
+              <i className="ri-bar-chart-box-line text-xl" style={{ color: 'white' }}></i>
+              <span style={{ color: 'white' }}>리포트 조회</span>
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 메인 콘텐츠 */}
+      <div className="max-w-md mx-auto px-5 py-5">
+
+        {/* 날짜 선택 */}
+        <div className="mb-5">
+          <div className="flex items-center justify-center space-x-3">
             <button
               onClick={goToPrevious}
-              className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
+              className="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center transition-colors cursor-pointer"
             >
-              <i className="ri-arrow-left-s-line text-xl text-gray-700"></i>
+              <i className="ri-arrow-left-s-line text-2xl text-gray-700"></i>
             </button>
-            <div className="px-8 py-3 bg-teal-50 border-2 border-teal-500 rounded-lg min-w-[200px] text-center">
-              <p className="text-lg font-bold text-teal-700">
+            <div className="text-center">
+              <p className="text-2xl font-bold text-gray-900">
                 {formatDisplayDate(selectedDate)}
               </p>
             </div>
             <button
               onClick={goToNext}
-              className="p-2 bg-gray-100 hover:bg-gray-200 rounded-lg transition-colors cursor-pointer"
+              className="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center transition-colors cursor-pointer"
             >
-              <i className="ri-arrow-right-s-line text-xl text-gray-700"></i>
+              <i className="ri-arrow-right-s-line text-2xl text-gray-700"></i>
             </button>
           </div>
+        </div>
 
-          <div className="flex items-center justify-between">
-            <div className="flex flex-wrap gap-3">
-              <button
-                onClick={() => {
-                  setPeriod('week');
-                  setSelectedDate(getThisSunday());
-                }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                  period === 'week'
-                    ? 'bg-teal-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                주간
-              </button>
-              <button
-                onClick={() => {
-                  setPeriod('month');
-                  setSelectedDate(new Date());
-                }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                  period === 'month'
-                    ? 'bg-teal-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                월간
-              </button>
-              <button
-                onClick={() => {
-                  setPeriod('year');
-                  setSelectedDate(new Date());
-                }}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                  period === 'year'
-                    ? 'bg-teal-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                연간
-              </button>
-            </div>
-
+        {/* Segmented Control 탭 */}
+        <div className="bg-white rounded-xl p-1 mb-5 shadow-sm">
+          <div className="grid grid-cols-3 gap-1">
             <button
-              onClick={handleExport}
-              className="flex items-center space-x-1 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium py-2 px-3 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+              onClick={() => {
+                setPeriod('week');
+                setSelectedDate(getThisSunday());
+              }}
+              className={`py-2 px-4 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+                period === 'week'
+                  ? ''
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              style={period === 'week' ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
             >
-              <i className="ri-download-line text-sm"></i>
-              <span>CSV</span>
+              주간
+            </button>
+            <button
+              onClick={() => {
+                setPeriod('month');
+                setSelectedDate(new Date());
+              }}
+              className={`py-2 px-4 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+                period === 'month'
+                  ? ''
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              style={period === 'month' ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
+            >
+              월간
+            </button>
+            <button
+              onClick={() => {
+                setPeriod('year');
+                setSelectedDate(new Date());
+              }}
+              className={`py-2 px-4 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+                period === 'year'
+                  ? ''
+                  : 'text-gray-600 hover:bg-gray-50'
+              }`}
+              style={period === 'year' ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
+            >
+              연간
             </button>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">총 출석</p>
-                <p className="text-3xl font-bold text-teal-600">
-                  {reportData?.totals?.attendance || 0}
-                </p>
+        {/* 재적 출석 현황 카드 */}
+        <div className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
+          <h2 className="text-base font-bold text-gray-900 mb-4">
+            재적 출석 현황
+          </h2>
+
+          {/* 출석/결석 통계 */}
+          <div className="grid grid-cols-2 gap-3 mb-5">
+            <div className="bg-primary-50 rounded-xl p-4 text-center">
+              <div className="flex justify-center mb-2">
+                <i className="ri-user-follow-line text-2xl text-primary-600"></i>
               </div>
-              <div className="w-12 h-12 bg-teal-100 rounded-full flex items-center justify-center">
-                <i className="ri-user-follow-line text-2xl text-teal-600"></i>
+              <p className="text-xs font-medium text-gray-600 mb-1">총 출석</p>
+              <p className="text-2xl font-bold text-primary-600">
+                {reportData?.totals?.attendance || 0}
+              </p>
+            </div>
+            <div className="bg-gray-100 rounded-xl p-4 text-center">
+              <div className="flex justify-center mb-2">
+                <i className="ri-user-unfollow-line text-2xl text-gray-600"></i>
               </div>
+              <p className="text-xs font-medium text-gray-600 mb-1">총 결석</p>
+              <p className="text-2xl font-bold text-gray-900">
+                {reportData?.totals?.absent || 0}
+              </p>
             </div>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm text-gray-600 mb-1">총 결석</p>
-                <p className="text-3xl font-bold text-orange-600">
-                  {reportData?.totals?.absent || 0}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-orange-100 rounded-full flex items-center justify-center">
-                <i className="ri-user-unfollow-line text-2xl text-orange-600"></i>
-              </div>
+          {/* 결석 명단 */}
+          <div className="pt-4 border-t border-gray-100">
+            <h3 className="text-sm font-semibold text-gray-700 mb-3">결석 명단</h3>
+            <div className="space-y-2">
+              {reportData?.absentees && reportData.absentees.length > 0 ? (
+                reportData.absentees.map((absentee, index) => (
+                  <div key={index} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
+                    <span className="text-sm font-medium text-gray-900">{absentee.name}</span>
+                    <span className="text-xs text-gray-600">{absentee.phone}</span>
+                  </div>
+                ))
+              ) : (
+                <div className="py-4 text-center">
+                  <p className="text-sm text-gray-500">결석자가 없습니다</p>
+                </div>
+              )}
             </div>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">개인별 점수</h3>
-            <div className="space-y-3">
-              {reportData?.per_user_points?.slice(0, 10).map((user, index) => (
-                <div key={user.user_id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
-                  <div className="flex items-center space-x-3">
-                    <div className={`w-8 h-8 rounded-full flex items-center justify-center font-bold text-sm ${
-                      index === 0 ? 'bg-yellow-100 text-yellow-700' :
-                      index === 1 ? 'bg-gray-200 text-gray-700' :
-                      index === 2 ? 'bg-orange-100 text-orange-700' :
-                      'bg-gray-100 text-gray-600'
-                    }`}>
-                      {index + 1}
-                    </div>
-                    <span className="font-medium text-gray-800">{user.name}</span>
-                  </div>
-                  <span className="font-bold text-teal-600">{user.points}점</span>
-                </div>
-              )) || (
-                <p className="text-center text-gray-500 py-8">데이터가 없습니다</p>
-              )}
+        {/* 전도 점수 카드 */}
+        <div className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
+          <h2 className="text-base font-bold text-gray-900 mb-5">
+            전도 점수
+          </h2>
+
+          {/* 원형 프로그레스 + 총점 */}
+          <div className="flex flex-col items-center mb-5">
+            <div className="relative w-36 h-36 mb-3">
+              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+                {/* 배경 원 */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  fill="none"
+                  stroke="#E3F2FD"
+                  strokeWidth="8"
+                />
+                {/* 진행 원 */}
+                <circle
+                  cx="50"
+                  cy="50"
+                  r="42"
+                  fill="none"
+                  stroke="#1E88E5"
+                  strokeWidth="8"
+                  strokeLinecap="round"
+                  strokeDasharray={`${(totalPoints / Math.max(totalPoints, 10)) * 264} 264`}
+                  className="transition-all duration-500"
+                />
+              </svg>
+              <div className="absolute inset-0 flex flex-col items-center justify-center">
+                <p className="text-3xl font-bold text-primary-600">{totalPoints}</p>
+                <p className="text-xs text-gray-600 font-medium">점</p>
+              </div>
             </div>
+            <p className="text-xs text-gray-600 font-medium">총 전도 점수</p>
           </div>
 
-          <div className="bg-white rounded-xl shadow-md p-6">
-            <h3 className="text-lg font-bold text-gray-800 mb-4">결석 명단</h3>
-            <div className="space-y-3">
-              {reportData?.absentees?.map((absentee, index) => (
-                <div key={index} className="flex items-center justify-between p-3 bg-red-50 rounded-lg">
-                  <span className="font-medium text-gray-800">{absentee.name}</span>
-                  <span className="text-sm text-gray-600">{absentee.phone}</span>
-                </div>
-              )) || (
-                <p className="text-center text-gray-500 py-8">결석자가 없습니다</p>
-              )}
+          {/* 개인별 점수 리스트 */}
+          {reportData?.per_user_points && reportData.per_user_points.length > 0 && (
+            <div className="pt-4 border-t border-gray-100">
+              <h3 className="text-sm font-semibold text-gray-700 mb-3">개인별 점수</h3>
+              <div className="space-y-2">
+                {reportData.per_user_points.slice(0, 10).map((user, index) => (
+                  <div
+                    key={user.user_id}
+                    className="flex items-center justify-between py-3 px-3 bg-gray-50 rounded-lg"
+                  >
+                    <div className="flex items-center space-x-3">
+                      {/* 순위 숫자 */}
+                      <span className="text-sm font-semibold text-gray-600 w-5">
+                        {index + 1}
+                      </span>
+                      {/* 이름 */}
+                      <span className="text-sm font-semibold text-gray-900">
+                        {user.name}
+                      </span>
+                    </div>
+                    {/* 점수 */}
+                    <span className="text-base font-bold text-primary-600">
+                      {user.points}점
+                    </span>
+                  </div>
+                ))}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </div>
     </div>

@@ -179,7 +179,7 @@ export default function Admin() {
                         <div className="flex justify-center space-x-2">
                           <button
                             onClick={() => handleApprove(user.id, true)}
-                            className="bg-teal-600 hover:bg-teal-700 text-white font-medium py-2 px-4 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
+                            className="bg-primary-500 hover:bg-primary-600 text-white font-medium py-2 px-4 rounded-lg transition-colors cursor-pointer whitespace-nowrap"
                           >
                             승인
                           </button>

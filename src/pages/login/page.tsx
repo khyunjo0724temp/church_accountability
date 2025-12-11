@@ -223,7 +223,7 @@ export default function Login() {
                   id="remember"
                   checked={formData.rememberDevice}
                   onChange={(e) => setFormData({ ...formData, rememberDevice: e.target.checked })}
-                  className="w-4 h-4 text-teal-600 border-gray-300 rounded focus:ring-teal-500 cursor-pointer"
+                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 cursor-pointer"
                 />
                 <label htmlFor="remember" className="ml-2 text-sm text-gray-700 cursor-pointer">
                   이 기기 기억하기
@@ -233,7 +233,7 @@ export default function Login() {
 
             <button
               type="submit"
-              className="w-full bg-teal-600 hover:bg-teal-700 text-white font-medium py-3 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+              className="w-full bg-primary-500 hover:bg-primary-600 text-white font-medium py-3 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
             >
               {isLogin ? '로그인' : '회원가입'}
             </button>
@@ -246,7 +246,7 @@ export default function Login() {
                 setError('');
                 setSuccess('');
               }}
-              className="text-sm text-teal-600 hover:text-teal-700 cursor-pointer whitespace-nowrap"
+              className="text-sm text-primary-500 hover:text-primary-600 cursor-pointer whitespace-nowrap"
             >
               {isLogin ? '계정이 없으신가요? 회원가입' : '이미 계정이 있으신가요? 로그인'}
             </button>
