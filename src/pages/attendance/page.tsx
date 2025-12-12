@@ -563,9 +563,9 @@ export default function Attendance() {
   const absentCount = regularMembersCount - regularPresentCount;
 
   return (
-    <div className="min-h-screen bg-page">
+    <div className="min-h-screen" style={{ background: 'linear-gradient(to bottom, #FAFAFA 0%, #FFFFFF 100%)' }}>
       {/* 헤더 */}
-      <nav className="bg-white border-b border-gray-200">
+      <nav className="bg-white/80 backdrop-blur-lg" style={{ borderBottom: '1px solid rgba(0, 0, 0, 0.06)' }}>
         <div className="max-w-md mx-auto px-5 h-14 flex items-center justify-between">
           <div className="flex items-center">
             <img
@@ -932,7 +932,8 @@ export default function Attendance() {
         <div className="flex space-x-3">
           <button
             onClick={() => navigate('/dashboard')}
-            className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-4 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+            className="flex-1 bg-white hover:bg-gray-50 text-gray-700 font-semibold py-4 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+            style={{ boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)' }}
           >
             취소
           </button>

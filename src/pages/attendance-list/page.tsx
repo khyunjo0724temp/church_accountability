@@ -223,17 +223,16 @@ export default function AttendanceList() {
       </div>
 
       {/* 메인 콘텐츠 */}
-      <div className="max-w-md mx-auto px-6 py-8">
+      <div className="max-w-md mx-auto px-5 py-5">
         {/* 날짜 선택 */}
-        <div className="mb-10">
-          <div className="flex items-center justify-between">
+        <div className="mb-5">
+          <div className="flex items-center justify-center space-x-3">
             <button
               onClick={goToPreviousWeek}
-              className="w-11 h-11 rounded-2xl hover:bg-white/60 flex items-center justify-center transition-all cursor-pointer"
-              style={{ boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)' }}
+              className="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center transition-colors cursor-pointer"
               disabled={loading}
             >
-              <i className="ri-arrow-left-s-line text-xl text-gray-600"></i>
+              <i className="ri-arrow-left-s-line text-2xl text-gray-700"></i>
             </button>
             <div className="text-center">
               <p className="text-lg font-bold text-gray-900">
@@ -242,11 +241,10 @@ export default function AttendanceList() {
             </div>
             <button
               onClick={goToNextWeek}
-              className="w-11 h-11 rounded-2xl hover:bg-white/60 flex items-center justify-center transition-all cursor-pointer"
-              style={{ boxShadow: '0 1px 3px rgba(0, 0, 0, 0.04)' }}
+              className="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center transition-colors cursor-pointer"
               disabled={loading}
             >
-              <i className="ri-arrow-right-s-line text-xl text-gray-600"></i>
+              <i className="ri-arrow-right-s-line text-2xl text-gray-700"></i>
             </button>
           </div>
         </div>
@@ -260,21 +258,22 @@ export default function AttendanceList() {
           </div>
         )}
 
-        {/* 총 출석 헤더 */}
-        <div className="mb-10">
-          <div className="flex items-baseline space-x-3">
-            <h1 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">총출석</h1>
-          </div>
-          <div className="mt-2 flex items-baseline space-x-2">
-            <span className="text-4xl font-bold text-gray-900" style={{ letterSpacing: '-0.03em' }}>
-              {attendanceData?.totalAttendance || 0}
-            </span>
-            <span className="text-xl font-medium text-gray-400">명</span>
-          </div>
-        </div>
-
-        {/* 출석 통계 카드 */}
+        {/* 총 출석 & 출석 통계 카드 */}
         <div className="bg-white rounded-3xl p-8 mb-6" style={{ boxShadow: '0 4px 12px rgba(0, 0, 0, 0.04)' }}>
+          {/* 총 출석 헤더 */}
+          <div className="mb-8 pb-8 border-b border-gray-100">
+            <div className="flex items-baseline space-x-3">
+              <h1 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">총출석</h1>
+            </div>
+            <div className="mt-2 flex items-baseline space-x-2">
+              <span className="text-4xl font-bold text-gray-900" style={{ letterSpacing: '-0.03em' }}>
+                {attendanceData?.totalAttendance || 0}
+              </span>
+              <span className="text-xl font-medium text-gray-400">명</span>
+            </div>
+          </div>
+
+          {/* 출석 현황 */}
           <h2 className="text-sm font-semibold text-gray-700 mb-8">출석 현황</h2>
           <div className="space-y-6">
             {/* 재적 출석 */}
@@ -285,11 +284,9 @@ export default function AttendanceList() {
                 </div>
                 <span className="text-base font-medium text-gray-700">재적 출석</span>
               </div>
-              <div className="px-4 py-2 rounded-full" style={{ backgroundColor: 'rgba(30, 136, 229, 0.08)' }}>
-                <span className="text-lg font-bold" style={{ color: '#1E88E5' }}>
-                  {attendanceData?.regularAttendance || 0}
-                </span>
-              </div>
+              <span className="text-2xl font-bold text-gray-900">
+                {attendanceData?.regularAttendance || 0}
+              </span>
             </div>
 
             {/* 새신자 출석 */}
@@ -300,11 +297,9 @@ export default function AttendanceList() {
                 </div>
                 <span className="text-base font-medium text-gray-700">새신자 출석</span>
               </div>
-              <div className="px-4 py-2 rounded-full bg-green-50">
-                <span className="text-lg font-bold text-green-600">
-                  {attendanceData?.newbieAttendance || 0}
-                </span>
-              </div>
+              <span className="text-2xl font-bold text-gray-900">
+                {attendanceData?.newbieAttendance || 0}
+              </span>
             </div>
 
             {/* 재적 결석 */}
@@ -315,11 +310,9 @@ export default function AttendanceList() {
                 </div>
                 <span className="text-base font-medium text-gray-700">재적 결석</span>
               </div>
-              <div className="px-4 py-2 rounded-full bg-gray-100">
-                <span className="text-lg font-bold text-gray-700">
-                  {attendanceData?.regularAbsent || 0}
-                </span>
-              </div>
+              <span className="text-2xl font-bold text-gray-900">
+                {attendanceData?.regularAbsent || 0}
+              </span>
             </div>
           </div>
         </div>

@@ -311,9 +311,9 @@ export default function Reports() {
     (reportData?.totals?.yearlyPoints || 0);
 
   return (
-    <div className="min-h-screen bg-page">
+    <div className="min-h-screen" style={{ background: 'linear-gradient(to bottom, #FAFAFA 0%, #FFFFFF 100%)' }}>
       {/* 헤더 */}
-      <nav className="bg-white border-b border-gray-200">
+      <nav className="bg-white/80 backdrop-blur-lg" style={{ borderBottom: '1px solid rgba(0, 0, 0, 0.06)' }}>
         <div className="max-w-md mx-auto px-5 h-14 flex items-center justify-between">
           <div className="flex items-center">
             <img
