@@ -16,7 +16,7 @@ interface ReportData {
     user_id: string;
     name: string;
     points: number;
-    referredMembers: Array<{ name: string; phone: string }>;
+    referredMembers: Array<{ name: string; phone: string; date: string }>;
   }>;
   absentees: Array<{
     name: string;
@@ -34,7 +34,7 @@ export default function Reports() {
   const [showReferralModal, setShowReferralModal] = useState(false);
   const [selectedReferrer, setSelectedReferrer] = useState<{
     name: string;
-    members: Array<{ name: string; phone: string }>;
+    members: Array<{ name: string; phone: string; date: string }>;
   } | null>(null);
 
   function getThisSunday(): Date {
@@ -57,7 +57,7 @@ export default function Reports() {
     if (period === 'week') {
       const month = date.getMonth() + 1;
       const day = date.getDate();
-      return `${month}월 ${day}일`;
+      return `${month}월 ${day}일 주일`;
     } else if (period === 'month') {
       const year = date.getFullYear();
       const month = date.getMonth() + 1;
@@ -177,7 +177,7 @@ export default function Reports() {
       // referrals 데이터 가져오기
       const { data: referralsData, error: referralsError } = await supabase
         .from('referrals')
-        .select('new_member_id, referrer_id')
+        .select('new_member_id, referrer_id, date')
         .eq('team_id', user.team_id);
 
       if (referralsError) {
@@ -220,7 +220,7 @@ export default function Reports() {
         })) || [];
 
       // 점수 계산 및 전도 명단 저장
-      const pointsMap = new Map<string, { count: number; members: Array<{ name: string; phone: string }> }>();
+      const pointsMap = new Map<string, { count: number; members: Array<{ name: string; phone: string; date: string }> }>();
 
       // 출석한 새신자들에 대해 점수 계산
       const presentRecords = attendanceData?.filter(r => r.present) || [];
@@ -250,9 +250,17 @@ export default function Reports() {
             // 최종 전도자에게 점수 추가 및 명단 저장
             const current = pointsMap.get(referrerId) || { count: 0, members: [] };
             current.count += 1;
+
+            // 출석 날짜 포맷팅 (record.week_start_date를 사용)
+            const attendanceDate = new Date(record.week_start_date);
+            const month = attendanceDate.getMonth() + 1;
+            const day = attendanceDate.getDate();
+            const formattedDate = `${month}월 ${day}일`;
+
             current.members.push({
               name: member.name,
-              phone: (member as any).phone || ''
+              phone: (member as any).phone || '',
+              date: formattedDate
             });
             pointsMap.set(referrerId, current);
           }
@@ -513,8 +521,7 @@ export default function Reports() {
                   </div>
                 </div>
               </div>
-              <h3 className="text-lg font-bold text-gray-900">총 전도 인원</h3>
-              <p className="text-sm text-gray-600 mt-1">{formatTitleDate(selectedDate)}</p>
+              <h3 className="text-lg font-bold text-gray-900">{teamName} {formatTitleDate(selectedDate)} 총 전도 인원</h3>
             </div>
 
             {/* 개인별 전도 인원 리스트 */}
@@ -535,7 +542,10 @@ export default function Reports() {
                       }}
                     >
                       <span className="text-base font-semibold text-gray-900">{user.name}</span>
-                      <span className="text-sm font-mono text-gray-500">{user.points}명</span>
+                      <div className="flex items-center space-x-2">
+                        <span className="text-sm font-mono text-gray-500">{user.points}명</span>
+                        <i className="ri-arrow-right-s-line text-lg text-gray-400"></i>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -552,7 +562,9 @@ export default function Reports() {
               <div className="p-6 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-xl font-bold text-gray-900">{selectedReferrer.name}님의 전도 명단</h3>
+                    <h3 className="text-xl font-bold text-gray-900">
+                      {selectedReferrer.name} {formatTitleDate(selectedDate)} 전도 횟수
+                    </h3>
                     <p className="text-sm text-gray-600 mt-1">총 {selectedReferrer.members?.length || 0}명</p>
                   </div>
                   <button
@@ -582,7 +594,7 @@ export default function Reports() {
                           </span>
                         </div>
                         <span className="text-xs text-gray-600">
-                          {member.phone}
+                          {member.date}
                         </span>
                       </div>
                     ))

@@ -8,6 +8,17 @@ interface AttendanceData {
   newbieAttendance: number;
   regularAbsent: number;
   absentees: Array<{
+    id: string;
+    name: string;
+    phone: string;
+  }>;
+  regularAttendees: Array<{
+    id: string;
+    name: string;
+    phone: string;
+  }>;
+  newbieAttendees: Array<{
+    id: string;
     name: string;
     phone: string;
   }>;
@@ -19,6 +30,11 @@ export default function AttendanceList() {
   const [attendanceData, setAttendanceData] = useState<AttendanceData | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [showAttendanceModal, setShowAttendanceModal] = useState(false);
+  const [selectedMember, setSelectedMember] = useState<{ name: string; dates: string[] } | null>(null);
+  const [teamName, setTeamName] = useState('');
+  const [showListModal, setShowListModal] = useState(false);
+  const [listModalData, setListModalData] = useState<{ title: string; members: Array<{ name: string; phone: string }> } | null>(null);
 
   function getThisSunday(): Date {
     const today = new Date();
@@ -40,7 +56,7 @@ export default function AttendanceList() {
   function formatDisplayDate(date: Date): string {
     const month = date.getMonth() + 1;
     const day = date.getDate();
-    return `${month}월 ${day}일`;
+    return `${month}월 ${day}일 주일`;
   }
 
   const goToPreviousWeek = () => {
@@ -70,6 +86,17 @@ export default function AttendanceList() {
 
       const user = JSON.parse(userData);
       const dateStr = formatDate(selectedDate);
+
+      // 팀 정보 가져오기
+      const { data: teamData } = await supabase
+        .from('teams')
+        .select('name')
+        .eq('id', user.team_id)
+        .single();
+
+      if (teamData) {
+        setTeamName(teamData.name);
+      }
 
       // 출석 기록 가져오기
       const { data: attendanceRecords, error: attendanceError } = await supabase
@@ -113,6 +140,28 @@ export default function AttendanceList() {
         return !r.present && member && !member.is_newbie;
       }).length || 0;
 
+      // 재적 출석자 명단
+      const regularAttendeeMemberIds = attendanceRecords
+        ?.filter(r => r.present)
+        .map(r => r.member_id) || [];
+
+      const regularAttendees = membersData
+        ?.filter(m => !m.is_newbie && regularAttendeeMemberIds.includes(m.id))
+        .map(m => ({
+          id: m.id,
+          name: m.name,
+          phone: (m as any).phone || ''
+        })) || [];
+
+      // 새신자 출석자 명단
+      const newbieAttendees = membersData
+        ?.filter(m => m.is_newbie && regularAttendeeMemberIds.includes(m.id))
+        .map(m => ({
+          id: m.id,
+          name: m.name,
+          phone: (m as any).phone || ''
+        })) || [];
+
       // 결석자 명단 (재적만)
       const absentMemberIds = attendanceRecords
         ?.filter(r => !r.present)
@@ -121,6 +170,7 @@ export default function AttendanceList() {
       const absentees = membersData
         ?.filter(m => !m.is_newbie && absentMemberIds.includes(m.id))
         .map(m => ({
+          id: m.id,
           name: m.name,
           phone: (m as any).phone || ''
         })) || [];
@@ -130,13 +180,48 @@ export default function AttendanceList() {
         regularAttendance,
         newbieAttendance,
         regularAbsent,
-        absentees
+        absentees,
+        regularAttendees,
+        newbieAttendees
       });
 
     } catch (error) {
       console.error('데이터 로드 실패:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const fetchMemberAttendanceHistory = async (memberId: string, memberName: string) => {
+    try {
+      const userData = localStorage.getItem('user');
+      if (!userData) return;
+
+      const user = JSON.parse(userData);
+
+      // 해당 멤버의 결석 기록 가져오기 (present = false인 것만)
+      const { data: records, error } = await supabase
+        .from('attendance_records')
+        .select('week_start_date')
+        .eq('member_id', memberId)
+        .eq('team_id', user.team_id)
+        .eq('present', false)
+        .order('week_start_date', { ascending: false });
+
+      if (error) {
+        console.error('결석 이력 로드 실패:', error);
+        return;
+      }
+
+      const dates = records?.map(r => {
+        const date = new Date(r.week_start_date);
+        return formatDisplayDate(date);
+      }) || [];
+
+      setSelectedMember({ name: memberName, dates });
+      setShowAttendanceModal(true);
+    } catch (error) {
+      console.error('결석 이력 로드 실패:', error);
     }
   };
 
@@ -263,7 +348,7 @@ export default function AttendanceList() {
           {/* 총 출석 헤더 */}
           <div className="mb-8 pb-8 border-b border-gray-100">
             <div className="flex items-baseline space-x-3">
-              <h1 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">총출석</h1>
+              <h1 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">{teamName} 총출석</h1>
             </div>
             <div className="mt-2 flex items-baseline space-x-2">
               <span className="text-4xl font-bold text-gray-900" style={{ letterSpacing: '-0.03em' }}>
@@ -274,75 +359,210 @@ export default function AttendanceList() {
           </div>
 
           {/* 출석 현황 */}
-          <h2 className="text-sm font-semibold text-gray-700 mb-8">출석 현황</h2>
+          <h2 className="text-sm font-semibold text-gray-700 mb-8">{teamName} 출석 현황</h2>
           <div className="space-y-6">
             {/* 재적 출석 */}
-            <div className="flex items-center justify-between">
+            <div
+              className="flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50/50 transition-all cursor-pointer"
+              onClick={() => {
+                setListModalData({
+                  title: '재적 출석',
+                  members: attendanceData?.regularAttendees || []
+                });
+                setShowListModal(true);
+              }}
+            >
               <div className="flex items-center space-x-4">
                 <div className="w-10 h-10 rounded-2xl bg-blue-50/50 flex items-center justify-center">
                   <i className="ri-user-line text-lg" style={{ color: '#1E88E5' }}></i>
                 </div>
                 <span className="text-base font-medium text-gray-700">재적 출석</span>
               </div>
-              <span className="text-2xl font-bold text-gray-900">
-                {attendanceData?.regularAttendance || 0}
-              </span>
+              <div className="flex items-center space-x-2">
+                <span className="text-2xl font-bold text-gray-900">
+                  {attendanceData?.regularAttendance || 0}
+                </span>
+                <i className="ri-arrow-right-s-line text-xl text-gray-400"></i>
+              </div>
             </div>
 
             {/* 새신자 출석 */}
-            <div className="flex items-center justify-between">
+            <div
+              className="flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50/50 transition-all cursor-pointer"
+              onClick={() => {
+                setListModalData({
+                  title: '새신자 출석',
+                  members: attendanceData?.newbieAttendees || []
+                });
+                setShowListModal(true);
+              }}
+            >
               <div className="flex items-center space-x-4">
                 <div className="w-10 h-10 rounded-2xl bg-green-50/50 flex items-center justify-center">
                   <i className="ri-user-add-line text-lg text-green-600"></i>
                 </div>
                 <span className="text-base font-medium text-gray-700">새신자 출석</span>
               </div>
-              <span className="text-2xl font-bold text-gray-900">
-                {attendanceData?.newbieAttendance || 0}
-              </span>
+              <div className="flex items-center space-x-2">
+                <span className="text-2xl font-bold text-gray-900">
+                  {attendanceData?.newbieAttendance || 0}
+                </span>
+                <i className="ri-arrow-right-s-line text-xl text-gray-400"></i>
+              </div>
             </div>
 
             {/* 재적 결석 */}
-            <div className="flex items-center justify-between">
+            <div
+              className="flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50/50 transition-all cursor-pointer"
+              onClick={() => {
+                setListModalData({
+                  title: '재적 결석',
+                  members: attendanceData?.absentees || []
+                });
+                setShowListModal(true);
+              }}
+            >
               <div className="flex items-center space-x-4">
                 <div className="w-10 h-10 rounded-2xl bg-gray-100/80 flex items-center justify-center">
                   <i className="ri-user-unfollow-line text-lg text-gray-500"></i>
                 </div>
                 <span className="text-base font-medium text-gray-700">재적 결석</span>
               </div>
-              <span className="text-2xl font-bold text-gray-900">
-                {attendanceData?.regularAbsent || 0}
-              </span>
+              <div className="flex items-center space-x-2">
+                <span className="text-2xl font-bold text-gray-900">
+                  {attendanceData?.regularAbsent || 0}
+                </span>
+                <i className="ri-arrow-right-s-line text-xl text-gray-400"></i>
+              </div>
             </div>
           </div>
         </div>
+      </div>
 
-        {/* 결석 명단 카드 */}
-        <div className="bg-white rounded-3xl p-8" style={{ boxShadow: '0 4px 12px rgba(0, 0, 0, 0.04)' }}>
-          <h2 className="text-sm font-semibold text-gray-700 mb-6">결석 명단</h2>
-          <div className="space-y-3">
-            {attendanceData?.absentees && attendanceData.absentees.length > 0 ? (
-              attendanceData.absentees.map((absentee, index) => (
-                <div
-                  key={index}
-                  className="flex items-center justify-between py-4 px-5 bg-gray-50/50 hover:bg-gray-100/50 rounded-2xl transition-all"
+      {/* 명단 모달 */}
+      {showListModal && listModalData && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[80vh] flex flex-col">
+            {/* 모달 헤더 */}
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">{listModalData.title}</h3>
+                  <p className="text-sm text-gray-600 mt-1">총 {listModalData.members?.length || 0}명</p>
+                </div>
+                <button
+                  onClick={() => setShowListModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                 >
-                  <span className="text-base font-semibold text-gray-900">{absentee.name}</span>
-                  <span className="text-sm font-mono text-gray-500">{absentee.phone}</span>
-                </div>
-              ))
-            ) : (
-              <div className="py-12 text-center">
-                <div className="w-16 h-16 rounded-3xl bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center mx-auto mb-4">
-                  <i className="ri-check-line text-2xl text-gray-400"></i>
-                </div>
-                <p className="text-base font-medium text-gray-500">결석자가 없습니다</p>
-                <p className="text-sm text-gray-400 mt-1">모든 재적 멤버가 출석했습니다</p>
+                  <i className="ri-close-line text-2xl text-gray-700"></i>
+                </button>
               </div>
-            )}
+            </div>
+
+            {/* 모달 내용 */}
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="space-y-2">
+                {listModalData.members && listModalData.members.length > 0 ? (
+                  listModalData.members.map((member, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span className="text-sm font-semibold text-gray-600 w-6">
+                          {index + 1}
+                        </span>
+                        <span className="text-sm font-semibold text-gray-900">
+                          {member.name}
+                        </span>
+                      </div>
+                      <span className="text-xs text-gray-600">
+                        {member.phone}
+                      </span>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-8 text-center">
+                    <p className="text-sm text-gray-500">명단이 없습니다</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 모달 푸터 */}
+            <div className="p-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowListModal(false)}
+                className="w-full py-3 rounded-lg font-semibold text-white transition-colors cursor-pointer"
+                style={{ backgroundColor: '#1E88E5' }}
+              >
+                닫기
+              </button>
+            </div>
           </div>
         </div>
-      </div>
+      )}
+
+      {/* 출석 이력 모달 */}
+      {showAttendanceModal && selectedMember && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[80vh] flex flex-col">
+            {/* 모달 헤더 */}
+            <div className="p-6 border-b border-gray-200">
+              <div className="flex items-center justify-between">
+                <div>
+                  <h3 className="text-xl font-bold text-gray-900">{selectedMember.name}님의 결석 기록</h3>
+                  <p className="text-sm text-gray-600 mt-1">총 {selectedMember.dates?.length || 0}회</p>
+                </div>
+                <button
+                  onClick={() => setShowAttendanceModal(false)}
+                  className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                >
+                  <i className="ri-close-line text-2xl text-gray-700"></i>
+                </button>
+              </div>
+            </div>
+
+            {/* 모달 내용 */}
+            <div className="p-6 overflow-y-auto flex-1">
+              <div className="space-y-2">
+                {selectedMember.dates && selectedMember.dates.length > 0 ? (
+                  selectedMember.dates.map((date, index) => (
+                    <div
+                      key={index}
+                      className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg"
+                    >
+                      <div className="flex items-center space-x-3">
+                        <span className="text-sm font-semibold text-gray-600 w-6">
+                          {index + 1}
+                        </span>
+                        <span className="text-sm font-semibold text-gray-900">
+                          {date}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="py-8 text-center">
+                    <p className="text-sm text-gray-500">결석 기록이 없습니다</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* 모달 푸터 */}
+            <div className="p-6 border-t border-gray-200">
+              <button
+                onClick={() => setShowAttendanceModal(false)}
+                className="w-full py-3 rounded-lg font-semibold text-white transition-colors cursor-pointer"
+                style={{ backgroundColor: '#1E88E5' }}
+              >
+                닫기
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
