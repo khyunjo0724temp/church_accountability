@@ -233,7 +233,10 @@ export default function Login() {
 
             <button
               type="submit"
-              className="w-full bg-primary-500 hover:bg-primary-600 text-white font-medium py-3 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+              className="w-full text-white font-medium py-3 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+              style={{ backgroundColor: '#1E88E5' }}
+              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1976D2'}
+              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1E88E5'}
             >
               {isLogin ? '로그인' : '회원가입'}
             </button>

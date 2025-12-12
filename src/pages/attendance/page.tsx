@@ -29,13 +29,14 @@ export default function Attendance() {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    is_newbie: false,
-    is_zone_leader: false,
+    role: '', // 'regular' | 'zone_leader' | 'newbie'
     zone_leader_id: '',
     referrer_id: ''
   });
   const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [loadingAttendance, setLoadingAttendance] = useState(false);
+  const [teamName, setTeamName] = useState('');
 
   useEffect(() => {
     fetchMembers();
@@ -67,7 +68,8 @@ export default function Attendance() {
   function formatDisplayDate(date: Date): string {
     const month = date.getMonth() + 1;
     const day = date.getDate();
-    return `${month}월 ${day}일`;
+
+    return `${month}월 ${day}일 주일`;
   }
 
   const goToPreviousWeek = () => {
@@ -89,6 +91,17 @@ export default function Attendance() {
       if (!user.team_id) {
         console.error('팀 ID가 없습니다');
         return;
+      }
+
+      // 팀 정보 가져오기
+      const { data: teamData } = await supabase
+        .from('teams')
+        .select('name')
+        .eq('id', user.team_id)
+        .single();
+
+      if (teamData) {
+        setTeamName(teamData.name);
       }
 
       const { data, error } = await supabase
@@ -159,6 +172,7 @@ export default function Attendance() {
 
   const fetchAttendance = async () => {
     try {
+      setLoadingAttendance(true);
       const dateStr = formatDate(selectedDate);
 
       const { data, error } = await supabase
@@ -168,6 +182,7 @@ export default function Attendance() {
 
       if (error) {
         console.error('출석 기록 로드 실패:', error);
+        setLoadingAttendance(false);
         return;
       }
 
@@ -179,8 +194,10 @@ export default function Attendance() {
       });
       setAttendance(newAttendance);
       setSavedAttendance(new Map(newAttendance)); // 저장된 상태도 업데이트 (정렬용)
+      setLoadingAttendance(false);
     } catch (error) {
       console.error('출석 기록 로드 실패:', error);
+      setLoadingAttendance(false);
     }
   };
 
@@ -238,9 +255,6 @@ export default function Attendance() {
       }
 
       setSuccessMessage('출석이 저장되었습니다');
-      setTimeout(() => {
-        setSuccessMessage('');
-      }, 3000);
     } catch (error) {
       console.error('저장 실패:', error);
       alert('출석 저장에 실패했습니다');
@@ -252,25 +266,57 @@ export default function Attendance() {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
+    // 역할 필수 검증
+    if (!formData.role) {
+      alert('역할을 선택해주세요');
+      return;
+    }
+
+    // 재적일 때 구역장 필수 검증
+    if (formData.role === 'regular' && !formData.zone_leader_id) {
+      alert('구역장을 선택해주세요');
+      return;
+    }
+
+    // 새신자일 때 전도자 필수 검증
+    if (formData.role === 'newbie' && !formData.referrer_id) {
+      alert('전도자를 선택해주세요');
+      return;
+    }
+
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
 
-      // 전도자에 따라 zone_leader_id 자동 계산
-      let calculatedZoneLeaderId = null;
+      // 역할에 따른 플래그 설정
+      const is_zone_leader = formData.role === 'zone_leader';
+      const is_newbie = formData.role === 'newbie';
+      const is_team_leader = false;
 
-      if (formData.referrer_id === user.id) {
-        // 팀장이 전도 → 팀장 직속 (zone_leader_id = null)
-        calculatedZoneLeaderId = null;
-      } else {
-        // 일반 멤버가 전도
-        const referrer = members.find(m => m.id === formData.referrer_id);
-        if (referrer) {
-          if (referrer.is_zone_leader) {
-            // 구역장이 전도 → 해당 구역장 직속
-            calculatedZoneLeaderId = referrer.id;
-          } else {
-            // 재적이 전도 → 전도자의 구역장 직속
-            calculatedZoneLeaderId = referrer.zone_leader_id;
+      // zone_leader_id 계산
+      let zone_leader_id = null;
+
+      if (formData.role === 'zone_leader') {
+        // 구역장은 zone_leader_id가 없음
+        zone_leader_id = null;
+      } else if (formData.role === 'regular') {
+        // 재적은 선택한 구역장
+        zone_leader_id = formData.zone_leader_id;
+      } else if (formData.role === 'newbie') {
+        // 새신자는 전도자에 따라 자동 계산
+        if (formData.referrer_id === user.id) {
+          // 팀장이 전도 → 팀장 직속 (zone_leader_id = null)
+          zone_leader_id = null;
+        } else {
+          // 일반 멤버가 전도
+          const referrer = members.find(m => m.id === formData.referrer_id);
+          if (referrer) {
+            if (referrer.is_zone_leader) {
+              // 구역장이 전도 → 해당 구역장 직속
+              zone_leader_id = referrer.id;
+            } else {
+              // 재적이 전도 → 전도자의 구역장 직속
+              zone_leader_id = referrer.zone_leader_id;
+            }
           }
         }
       }
@@ -282,10 +328,10 @@ export default function Attendance() {
           .update({
             name: formData.name,
             phone: formData.phone,
-            is_newbie: formData.is_newbie,
-            is_zone_leader: formData.is_zone_leader,
-            is_team_leader: false,
-            zone_leader_id: formData.is_zone_leader ? null : calculatedZoneLeaderId
+            is_newbie: is_newbie,
+            is_zone_leader: is_zone_leader,
+            is_team_leader: is_team_leader,
+            zone_leader_id: zone_leader_id
           })
           .eq('id', editingMember.id);
 
@@ -294,8 +340,8 @@ export default function Attendance() {
           return;
         }
 
-        // 전도자가 변경된 경우 referrals 업데이트
-        if (formData.referrer_id) {
+        // 새신자인 경우에만 referrals 업데이트
+        if (is_newbie && formData.referrer_id) {
           await supabase
             .from('referrals')
             .delete()
@@ -325,10 +371,10 @@ export default function Attendance() {
             team_id: user.team_id,
             name: formData.name,
             phone: formData.phone,
-            is_newbie: formData.is_newbie,
-            is_zone_leader: formData.is_zone_leader,
-            is_team_leader: false,
-            zone_leader_id: formData.is_zone_leader ? null : calculatedZoneLeaderId
+            is_newbie: is_newbie,
+            is_zone_leader: is_zone_leader,
+            is_team_leader: is_team_leader,
+            zone_leader_id: zone_leader_id
           })
           .select()
           .single();
@@ -338,8 +384,8 @@ export default function Attendance() {
           return;
         }
 
-        // 전도자가 있는 경우 referrals 테이블에 전도자 정보 저장
-        if (formData.referrer_id && newMember) {
+        // 새신자인 경우에만 referrals 테이블에 전도자 정보 저장
+        if (is_newbie && formData.referrer_id && newMember) {
           const today = new Date();
           const dateStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
 
@@ -389,8 +435,7 @@ export default function Attendance() {
     setFormData({
       name: '',
       phone: '',
-      is_newbie: false,
-      is_zone_leader: false,
+      role: '', // 필수 선택
       zone_leader_id: '',
       referrer_id: user.id || '' // 팀장을 기본 전도자로 설정
     });
@@ -399,6 +444,14 @@ export default function Attendance() {
 
   const openEditModal = async (member: Member) => {
     setEditingMember(member);
+
+    // 역할 결정
+    let role = 'regular';
+    if (member.is_zone_leader) {
+      role = 'zone_leader';
+    } else if (member.is_newbie) {
+      role = 'newbie';
+    }
 
     // 새신자인 경우 referrer_id 가져오기
     let referrerId = '';
@@ -417,8 +470,7 @@ export default function Attendance() {
     setFormData({
       name: member.name,
       phone: member.phone,
-      is_newbie: member.is_newbie,
-      is_zone_leader: member.is_zone_leader,
+      role: role,
       zone_leader_id: member.zone_leader_id || '',
       referrer_id: referrerId
     });
@@ -503,10 +555,11 @@ export default function Attendance() {
   });
 
 
-  const presentCount = Array.from(attendance.values()).filter(v => v).length;
-  // 재적 멤버(새신자 아닌 사람) 중 결석자만 계산
+  // 통계 계산
   const regularMembersCount = members.filter(m => !m.is_newbie).length;
   const regularPresentCount = members.filter(m => !m.is_newbie && attendance.get(m.id)).length;
+  const newbieAttendanceCount = members.filter(m => m.is_newbie && attendance.get(m.id)).length;
+  const totalAttendanceCount = regularPresentCount + newbieAttendanceCount;
   const absentCount = regularMembersCount - regularPresentCount;
 
   return (
@@ -514,13 +567,12 @@ export default function Attendance() {
       {/* 헤더 */}
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-md mx-auto px-5 h-14 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center">
             <img
               src="https://public.readdy.ai/ai/img_res/6f5f4709-4636-4b57-8f60-15ce4bfa71df.png"
               alt="로고"
               className="h-7 w-auto object-contain"
             />
-            <h1 className="text-lg font-bold text-gray-900">출석 체크</h1>
           </div>
           <button
             onClick={() => setSidebarOpen(true)}
@@ -570,13 +622,23 @@ export default function Attendance() {
             </button>
             <button
               onClick={() => {
+                navigate('/attendance-list');
+                setSidebarOpen(false);
+              }}
+              className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-medium cursor-pointer whitespace-nowrap transition-colors"
+            >
+              <i className="ri-file-list-3-line text-xl text-gray-600"></i>
+              <span className="text-gray-900">재적 명단</span>
+            </button>
+            <button
+              onClick={() => {
                 navigate('/reports');
                 setSidebarOpen(false);
               }}
               className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-medium cursor-pointer whitespace-nowrap transition-colors"
             >
-              <i className="ri-bar-chart-box-line text-xl text-gray-600"></i>
-              <span className="text-gray-900">리포트 조회</span>
+              <i className="ri-user-add-line text-xl text-gray-600"></i>
+              <span className="text-gray-900">전도 명단</span>
             </button>
           </div>
         </div>
@@ -591,53 +653,58 @@ export default function Attendance() {
             <button
               onClick={goToPreviousWeek}
               className="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center transition-colors cursor-pointer"
+              disabled={loadingAttendance}
             >
               <i className="ri-arrow-left-s-line text-2xl text-gray-700"></i>
             </button>
             <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-lg font-bold text-gray-900">
                 {formatDisplayDate(selectedDate)}
               </p>
             </div>
             <button
               onClick={goToNextWeek}
               className="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center transition-colors cursor-pointer"
+              disabled={loadingAttendance}
             >
               <i className="ri-arrow-right-s-line text-2xl text-gray-700"></i>
             </button>
           </div>
         </div>
 
-        {/* 출석/결석 통계 카드 */}
-        <div className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
-          <div className="grid grid-cols-2 gap-3">
-            <div className="bg-primary-50 rounded-xl p-4 text-center">
-              <div className="flex justify-center mb-2">
-                <i className="ri-user-follow-line text-2xl text-primary-600"></i>
-              </div>
-              <p className="text-xs font-medium text-gray-600 mb-1">출석</p>
-              <p className="text-2xl font-bold text-primary-600">{presentCount}</p>
-            </div>
-            <div className="bg-gray-100 rounded-xl p-4 text-center">
-              <div className="flex justify-center mb-2">
-                <i className="ri-user-unfollow-line text-2xl text-gray-600"></i>
-              </div>
-              <p className="text-xs font-medium text-gray-600 mb-1">결석</p>
-              <p className="text-2xl font-bold text-gray-900">{absentCount}</p>
+        {loadingAttendance && (
+          <div className="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
+            <div className="flex flex-col items-center space-y-3">
+              <i className="ri-loader-4-line text-5xl animate-spin" style={{ color: '#1E88E5' }}></i>
+              <span className="text-lg font-medium text-gray-900">로딩 중...</span>
             </div>
           </div>
-        </div>
+        )}
 
         {successMessage && (
-          <div className="mb-4 p-4 bg-green-50 border border-green-200 rounded-xl text-green-700 text-sm">
-            {successMessage}
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+            <div className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full mx-4">
+              <div className="flex flex-col items-center space-y-4">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: '#4CAF50' }}>
+                  <i className="ri-check-line text-4xl text-white"></i>
+                </div>
+                <p className="text-lg font-bold text-gray-900 text-center">{successMessage}</p>
+                <button
+                  onClick={() => setSuccessMessage('')}
+                  className="w-full py-3 rounded-lg font-semibold text-white transition-colors cursor-pointer"
+                  style={{ backgroundColor: '#1E88E5' }}
+                >
+                  확인
+                </button>
+              </div>
+            </div>
           </div>
         )}
 
         {/* 멤버 출석 체크 카드 */}
         <div className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-bold text-gray-900">멤버 출석 체크</h3>
+            <h3 className="text-base font-bold text-gray-900">{teamName} 출석 체크</h3>
             <button
               onClick={openAddModal}
               className="flex items-center space-x-1.5 text-primary-600 hover:text-primary-700 font-semibold py-2 px-3 rounded-lg hover:bg-primary-50 transition-colors cursor-pointer whitespace-nowrap text-sm"
@@ -680,14 +747,20 @@ export default function Attendance() {
                             className="flex items-center space-x-4 flex-1 cursor-pointer"
                             onClick={() => toggleAttendance(member.id)}
                           >
-                            <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center ${
-                              attendance.get(member.id)
-                                ? 'bg-primary-500 border-primary-500'
-                                : 'border-gray-300'
-                            }`}>
-                              {attendance.get(member.id) && (
-                                <i className="ri-check-line text-white text-lg"></i>
-                              )}
+                            <div
+                              className="w-6 h-6 rounded-md border-2 flex items-center justify-center relative"
+                              style={{
+                                backgroundColor: attendance.get(member.id) ? '#1E88E5' : 'white',
+                                borderColor: attendance.get(member.id) ? '#1E88E5' : '#D1D5DB'
+                              }}
+                            >
+                              <i
+                                className="ri-check-line text-white text-lg absolute"
+                                style={{
+                                  opacity: attendance.get(member.id) ? 1 : 0,
+                                  transition: 'opacity 0.2s'
+                                }}
+                              ></i>
                             </div>
                             <div>
                               <p className="font-medium text-gray-800">{member.name}</p>
@@ -739,14 +812,20 @@ export default function Attendance() {
                             className="flex items-center space-x-4 flex-1 cursor-pointer"
                             onClick={() => toggleAttendance(member.id)}
                           >
-                            <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center ${
-                              attendance.get(member.id)
-                                ? 'bg-primary-500 border-primary-500'
-                                : 'border-gray-300'
-                            }`}>
-                              {attendance.get(member.id) && (
-                                <i className="ri-check-line text-white text-lg"></i>
-                              )}
+                            <div
+                              className="w-6 h-6 rounded-md border-2 flex items-center justify-center relative"
+                              style={{
+                                backgroundColor: attendance.get(member.id) ? '#1E88E5' : 'white',
+                                borderColor: attendance.get(member.id) ? '#1E88E5' : '#D1D5DB'
+                              }}
+                            >
+                              <i
+                                className="ri-check-line text-white text-lg absolute"
+                                style={{
+                                  opacity: attendance.get(member.id) ? 1 : 0,
+                                  transition: 'opacity 0.2s'
+                                }}
+                              ></i>
                             </div>
                             <div>
                               <p className="font-medium text-gray-800">{member.name}</p>
@@ -803,14 +882,20 @@ export default function Attendance() {
                               className="flex items-center space-x-4 flex-1 cursor-pointer"
                               onClick={() => toggleAttendance(member.id)}
                             >
-                              <div className={`w-6 h-6 rounded-md border-2 flex items-center justify-center ${
-                                attendance.get(member.id)
-                                  ? 'bg-primary-500 border-primary-500'
-                                  : 'border-gray-300'
-                              }`}>
-                                {attendance.get(member.id) && (
-                                  <i className="ri-check-line text-white text-lg"></i>
-                                )}
+                              <div
+                                className="w-6 h-6 rounded-md border-2 flex items-center justify-center relative"
+                                style={{
+                                  backgroundColor: attendance.get(member.id) ? '#1E88E5' : 'white',
+                                  borderColor: attendance.get(member.id) ? '#1E88E5' : '#D1D5DB'
+                                }}
+                              >
+                                <i
+                                  className="ri-check-line text-white text-lg absolute"
+                                  style={{
+                                    opacity: attendance.get(member.id) ? 1 : 0,
+                                    transition: 'opacity 0.2s'
+                                  }}
+                                ></i>
                               </div>
                               <div>
                                 <div className="flex items-center space-x-2">
@@ -899,62 +984,98 @@ export default function Attendance() {
               </div>
 
               <div className="pt-2 space-y-3 border-t border-gray-200">
-                <p className="text-sm font-semibold text-gray-700">역할</p>
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="is_zone_leader"
-                    checked={formData.is_zone_leader}
-                    onChange={(e) => setFormData({ ...formData, is_zone_leader: e.target.checked, zone_leader_id: e.target.checked ? '' : formData.zone_leader_id })}
-                    className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 cursor-pointer"
-                  />
-                  <label htmlFor="is_zone_leader" className="ml-3 text-sm font-medium text-gray-700 cursor-pointer">
-                    구역장
-                  </label>
-                </div>
+                <p className="text-sm font-semibold text-gray-700">역할 <span className="text-red-500">*</span></p>
 
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="is_newbie"
-                    checked={formData.is_newbie}
-                    onChange={(e) => setFormData({ ...formData, is_newbie: e.target.checked })}
-                    className="w-5 h-5 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500 cursor-pointer"
-                  />
-                  <label htmlFor="is_newbie" className="ml-3 text-sm font-medium text-gray-700 cursor-pointer">
-                    새신자
+                <div className="space-y-2">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name="role"
+                      value="regular"
+                      checked={formData.role === 'regular'}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '' })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 focus:ring-primary-500 cursor-pointer"
+                    />
+                    <span className="ml-3 text-sm font-medium text-gray-700">재적</span>
+                  </label>
+
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name="role"
+                      value="zone_leader"
+                      checked={formData.role === 'zone_leader'}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '' })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 focus:ring-primary-500 cursor-pointer"
+                    />
+                    <span className="ml-3 text-sm font-medium text-gray-700">구역장</span>
+                  </label>
+
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name="role"
+                      value="newbie"
+                      checked={formData.role === 'newbie'}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '' })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 focus:ring-primary-500 cursor-pointer"
+                    />
+                    <span className="ml-3 text-sm font-medium text-gray-700">새신자</span>
                   </label>
                 </div>
               </div>
 
-              <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
-                  전도자 <span className="text-red-500">*</span>
-                </label>
-                <select
-                  required
-                  value={formData.referrer_id}
-                  onChange={(e) => setFormData({ ...formData, referrer_id: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm cursor-pointer"
-                >
-                  <option value="">전도자를 선택하세요</option>
-                  {(() => {
-                    const user = JSON.parse(localStorage.getItem('user') || '{}');
-                    return (
-                      <>
-                        <option key={user.id} value={user.id}>
-                          {user.name} (팀장)
-                        </option>
-                        {regularMembers.map((member) => (
-                          <option key={member.id} value={member.id}>
-                            {member.name}{member.is_zone_leader ? ' (구역장)' : ''}
+              {/* 재적인 경우 구역장 선택 */}
+              {formData.role === 'regular' && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    구역장 <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={formData.zone_leader_id}
+                    onChange={(e) => setFormData({ ...formData, zone_leader_id: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm cursor-pointer"
+                  >
+                    <option value="">구역장을 선택하세요</option>
+                    {members.filter(m => m.is_zone_leader).map(leader => (
+                      <option key={leader.id} value={leader.id}>{leader.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {/* 새신자인 경우 전도자 선택 */}
+              {formData.role === 'newbie' && (
+                <div>
+                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                    전도자 <span className="text-red-500">*</span>
+                  </label>
+                  <select
+                    required
+                    value={formData.referrer_id}
+                    onChange={(e) => setFormData({ ...formData, referrer_id: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm cursor-pointer"
+                  >
+                    <option value="">전도자를 선택하세요</option>
+                    {(() => {
+                      const user = JSON.parse(localStorage.getItem('user') || '{}');
+                      return (
+                        <>
+                          <option key={user.id} value={user.id}>
+                            {user.name} (팀장)
                           </option>
-                        ))}
-                      </>
-                    );
-                  })()}
-                </select>
-              </div>
+                          {members.filter(m => !m.is_newbie).map((member) => (
+                            <option key={member.id} value={member.id}>
+                              {member.name}{member.is_zone_leader ? ' (구역장)' : ''}
+                            </option>
+                          ))}
+                        </>
+                      );
+                    })()}
+                  </select>
+                </div>
+              )}
 
               <div className="flex space-x-3 pt-6 border-t border-gray-200">
                 <button

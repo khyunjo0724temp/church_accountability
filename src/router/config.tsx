@@ -5,6 +5,7 @@ const Home = lazy(() => import('../pages/home/page'));
 const Login = lazy(() => import('../pages/login/page'));
 const SuperLogin = lazy(() => import('../pages/super-login/page'));
 const Attendance = lazy(() => import('../pages/attendance/page'));
+const AttendanceList = lazy(() => import('../pages/attendance-list/page'));
 const Reports = lazy(() => import('../pages/reports/page'));
 const Admin = lazy(() => import('../pages/admin/page'));
 const NotFound = lazy(() => import('../pages/NotFound'));
@@ -29,6 +30,10 @@ const routes: RouteObject[] = [
   {
     path: '/attendance',
     element: <Attendance />,
+  },
+  {
+    path: '/attendance-list',
+    element: <AttendanceList />,
   },
   {
     path: '/reports',

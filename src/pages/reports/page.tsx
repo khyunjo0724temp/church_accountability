@@ -5,14 +5,18 @@ import { supabase } from '../../lib/supabase';
 interface ReportData {
   totals: {
     attendance: number;
+    regularAttendance: number;
+    newbieAttendance: number;
     absent: number;
     weeklyPoints: number;
     monthlyPoints: number;
+    yearlyPoints: number;
   };
   per_user_points: Array<{
     user_id: string;
     name: string;
     points: number;
+    referredMembers: Array<{ name: string; phone: string }>;
   }>;
   absentees: Array<{
     name: string;
@@ -25,6 +29,13 @@ export default function Reports() {
   const [period, setPeriod] = useState<'week' | 'month' | 'year'>('week');
   const [reportData, setReportData] = useState<ReportData | null>(null);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [teamName, setTeamName] = useState('');
+  const [loading, setLoading] = useState(false);
+  const [showReferralModal, setShowReferralModal] = useState(false);
+  const [selectedReferrer, setSelectedReferrer] = useState<{
+    name: string;
+    members: Array<{ name: string; phone: string }>;
+  } | null>(null);
 
   function getThisSunday(): Date {
     const today = new Date();
@@ -56,6 +67,19 @@ export default function Reports() {
     }
   }
 
+  function formatTitleDate(date: Date): string {
+    if (period === 'week') {
+      const month = date.getMonth() + 1;
+      const day = date.getDate();
+      return `${month}월 ${day}일`;
+    } else if (period === 'month') {
+      const month = date.getMonth() + 1;
+      return `${month}월`;
+    } else {
+      return `${date.getFullYear()}년`;
+    }
+  }
+
   const goToPrevious = () => {
     const newDate = new Date(selectedDate);
     if (period === 'week') {
@@ -82,10 +106,25 @@ export default function Reports() {
 
   const fetchReport = async () => {
     try {
+      setLoading(true);
       const userData = localStorage.getItem('user');
-      if (!userData) return;
+      if (!userData) {
+        setLoading(false);
+        return;
+      }
 
       const user = JSON.parse(userData);
+
+      // 팀 정보 가져오기
+      const { data: teamData } = await supabase
+        .from('teams')
+        .select('name')
+        .eq('id', user.team_id)
+        .single();
+
+      if (teamData) {
+        setTeamName(teamData.name);
+      }
 
       let startDate = '';
       let endDate = '';
@@ -150,6 +189,18 @@ export default function Reports() {
       // 재적 멤버의 결석만 계산 (새신자는 결석 기록이 없음)
       const totalAbsent = attendanceData?.filter(r => !r.present).length || 0;
 
+      // 재적 출석 계산
+      const regularAttendance = attendanceData?.filter(r => {
+        const member = membersData?.find(m => m.id === r.member_id);
+        return r.present && member && !member.is_newbie;
+      }).length || 0;
+
+      // 새신자 출석 계산
+      const newbieAttendance = attendanceData?.filter(r => {
+        const member = membersData?.find(m => m.id === r.member_id);
+        return r.present && member && member.is_newbie;
+      }).length || 0;
+
       // 결석자 찾기 (가장 최근 주에서, 재적 멤버만)
       const latestWeek = attendanceData?.reduce((latest, record) => {
         return record.week_start_date > latest ? record.week_start_date : latest;
@@ -168,8 +219,8 @@ export default function Reports() {
           phone: (m as any).phone || ''
         })) || [];
 
-      // 점수 계산
-      const pointsMap = new Map<string, number>();
+      // 점수 계산 및 전도 명단 저장
+      const pointsMap = new Map<string, { count: number; members: Array<{ name: string; phone: string }> }>();
 
       // 출석한 새신자들에 대해 점수 계산
       const presentRecords = attendanceData?.filter(r => r.present) || [];
@@ -196,14 +247,20 @@ export default function Reports() {
               }
             }
 
-            // 최종 전도자에게 점수 추가
-            pointsMap.set(referrerId, (pointsMap.get(referrerId) || 0) + 1);
+            // 최종 전도자에게 점수 추가 및 명단 저장
+            const current = pointsMap.get(referrerId) || { count: 0, members: [] };
+            current.count += 1;
+            current.members.push({
+              name: member.name,
+              phone: (member as any).phone || ''
+            });
+            pointsMap.set(referrerId, current);
           }
         }
       }
 
       // 점수를 배열로 변환하고 정렬
-      const perUserPoints = Array.from(pointsMap.entries()).map(([userId, points]) => {
+      const perUserPoints = Array.from(pointsMap.entries()).map(([userId, data]) => {
         const member = membersData?.find(m => m.id === userId);
         let userName = '알 수 없음';
 
@@ -217,25 +274,31 @@ export default function Reports() {
         return {
           user_id: userId,
           name: userName,
-          points: points
+          points: data.count,
+          referredMembers: data.members
         };
       }).sort((a, b) => b.points - a.points);
 
       // 총 점수 계산
-      const totalPoints = Array.from(pointsMap.values()).reduce((sum, p) => sum + p, 0);
+      const totalPoints = Array.from(pointsMap.values()).reduce((sum, p) => sum + p.count, 0);
 
       setReportData({
         totals: {
           attendance: totalAttendance,
+          regularAttendance: regularAttendance,
+          newbieAttendance: newbieAttendance,
           absent: totalAbsent,
           weeklyPoints: period === 'week' ? totalPoints : 0,
-          monthlyPoints: period === 'month' ? totalPoints : 0
+          monthlyPoints: period === 'month' ? totalPoints : 0,
+          yearlyPoints: period === 'year' ? totalPoints : 0
         },
         per_user_points: perUserPoints,
         absentees: absentees
       });
     } catch (error) {
       console.error('리포트 로드 실패:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -245,20 +308,19 @@ export default function Reports() {
 
   const totalPoints = period === 'week' ? (reportData?.totals?.weeklyPoints || 0) :
     period === 'month' ? (reportData?.totals?.monthlyPoints || 0) :
-    (reportData?.totals?.weeklyPoints || 0);
+    (reportData?.totals?.yearlyPoints || 0);
 
   return (
     <div className="min-h-screen bg-page">
       {/* 헤더 */}
       <nav className="bg-white border-b border-gray-200">
         <div className="max-w-md mx-auto px-5 h-14 flex items-center justify-between">
-          <div className="flex items-center space-x-2">
+          <div className="flex items-center">
             <img
               src="https://public.readdy.ai/ai/img_res/6f5f4709-4636-4b57-8f60-15ce4bfa71df.png"
               alt="로고"
               className="h-7 w-auto object-contain"
             />
-            <h1 className="text-lg font-bold text-gray-900">리포트</h1>
           </div>
           <button
             onClick={() => setSidebarOpen(true)}
@@ -307,14 +369,24 @@ export default function Reports() {
             </button>
             <button
               onClick={() => {
+                navigate('/attendance-list');
+                setSidebarOpen(false);
+              }}
+              className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-medium cursor-pointer whitespace-nowrap transition-colors"
+            >
+              <i className="ri-file-list-3-line text-xl text-gray-600"></i>
+              <span className="text-gray-900">재적 명단</span>
+            </button>
+            <button
+              onClick={() => {
                 navigate('/reports');
                 setSidebarOpen(false);
               }}
               className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors"
               style={{ backgroundColor: '#1E88E5', color: 'white' }}
             >
-              <i className="ri-bar-chart-box-line text-xl" style={{ color: 'white' }}></i>
-              <span style={{ color: 'white' }}>리포트 조회</span>
+              <i className="ri-user-add-line text-xl" style={{ color: 'white' }}></i>
+              <span style={{ color: 'white' }}>전도 명단</span>
             </button>
           </div>
         </div>
@@ -333,7 +405,7 @@ export default function Reports() {
               <i className="ri-arrow-left-s-line text-2xl text-gray-700"></i>
             </button>
             <div className="text-center">
-              <p className="text-2xl font-bold text-gray-900">
+              <p className="text-lg font-bold text-gray-900">
                 {formatDisplayDate(selectedDate)}
               </p>
             </div>
@@ -345,6 +417,15 @@ export default function Reports() {
             </button>
           </div>
         </div>
+
+        {loading && (
+          <div className="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
+            <div className="flex flex-col items-center space-y-3">
+              <i className="ri-loader-4-line text-5xl animate-spin" style={{ color: '#1E88E5' }}></i>
+              <span className="text-lg font-medium text-gray-900">로딩 중...</span>
+            </div>
+          </div>
+        )}
 
         {/* Segmented Control 탭 */}
         <div className="bg-white rounded-xl p-1 mb-5 shadow-sm">
@@ -394,124 +475,153 @@ export default function Reports() {
           </div>
         </div>
 
-        {/* 재적 출석 현황 카드 */}
+        {/* 전도 인원 카드 */}
         <div className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
-          <h2 className="text-base font-bold text-gray-900 mb-4">
-            재적 출석 현황
-          </h2>
-
-          {/* 출석/결석 통계 */}
-          <div className="grid grid-cols-2 gap-3 mb-5">
-            <div className="bg-primary-50 rounded-xl p-4 text-center">
-              <div className="flex justify-center mb-2">
-                <i className="ri-user-follow-line text-2xl text-primary-600"></i>
-              </div>
-              <p className="text-xs font-medium text-gray-600 mb-1">총 출석</p>
-              <p className="text-2xl font-bold text-primary-600">
-                {reportData?.totals?.attendance || 0}
-              </p>
-            </div>
-            <div className="bg-gray-100 rounded-xl p-4 text-center">
-              <div className="flex justify-center mb-2">
-                <i className="ri-user-unfollow-line text-2xl text-gray-600"></i>
-              </div>
-              <p className="text-xs font-medium text-gray-600 mb-1">총 결석</p>
-              <p className="text-2xl font-bold text-gray-900">
-                {reportData?.totals?.absent || 0}
-              </p>
-            </div>
-          </div>
-
-          {/* 결석 명단 */}
-          <div className="pt-4 border-t border-gray-100">
-            <h3 className="text-sm font-semibold text-gray-700 mb-3">결석 명단</h3>
-            <div className="space-y-2">
-              {reportData?.absentees && reportData.absentees.length > 0 ? (
-                reportData.absentees.map((absentee, index) => (
-                  <div key={index} className="flex items-center justify-between py-2 px-3 bg-gray-50 rounded-lg">
-                    <span className="text-sm font-medium text-gray-900">{absentee.name}</span>
-                    <span className="text-xs text-gray-600">{absentee.phone}</span>
-                  </div>
-                ))
-              ) : (
-                <div className="py-4 text-center">
-                  <p className="text-sm text-gray-500">결석자가 없습니다</p>
-                </div>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* 전도 점수 카드 */}
-        <div className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
-          <h2 className="text-base font-bold text-gray-900 mb-5">
-            전도 점수
-          </h2>
-
-          {/* 원형 프로그레스 + 총점 */}
-          <div className="flex flex-col items-center mb-5">
-            <div className="relative w-36 h-36 mb-3">
-              <svg className="w-full h-full transform -rotate-90" viewBox="0 0 100 100">
+          <div className="space-y-4">
+            {/* 총 전도 인원 원형 그래프 */}
+            <div className="py-6 flex flex-col items-center justify-center border-b border-gray-100">
+              <div className="relative w-32 h-32 mb-4">
                 {/* 배경 원 */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="42"
-                  fill="none"
-                  stroke="#E3F2FD"
-                  strokeWidth="8"
-                />
-                {/* 진행 원 */}
-                <circle
-                  cx="50"
-                  cy="50"
-                  r="42"
-                  fill="none"
-                  stroke="#1E88E5"
-                  strokeWidth="8"
-                  strokeLinecap="round"
-                  strokeDasharray={`${(totalPoints / Math.max(totalPoints, 10)) * 264} 264`}
-                  className="transition-all duration-500"
-                />
-              </svg>
-              <div className="absolute inset-0 flex flex-col items-center justify-center">
-                <p className="text-3xl font-bold text-primary-600">{totalPoints}</p>
-                <p className="text-xs text-gray-600 font-medium">점</p>
-              </div>
-            </div>
-            <p className="text-xs text-gray-600 font-medium">총 전도 점수</p>
-          </div>
-
-          {/* 개인별 점수 리스트 */}
-          {reportData?.per_user_points && reportData.per_user_points.length > 0 && (
-            <div className="pt-4 border-t border-gray-100">
-              <h3 className="text-sm font-semibold text-gray-700 mb-3">개인별 점수</h3>
-              <div className="space-y-2">
-                {reportData.per_user_points.slice(0, 10).map((user, index) => (
-                  <div
-                    key={user.user_id}
-                    className="flex items-center justify-between py-3 px-3 bg-gray-50 rounded-lg"
-                  >
-                    <div className="flex items-center space-x-3">
-                      {/* 순위 숫자 */}
-                      <span className="text-sm font-semibold text-gray-600 w-5">
-                        {index + 1}
-                      </span>
-                      {/* 이름 */}
-                      <span className="text-sm font-semibold text-gray-900">
-                        {user.name}
-                      </span>
-                    </div>
-                    {/* 점수 */}
-                    <span className="text-base font-bold text-primary-600">
-                      {user.points}점
-                    </span>
+                <svg className="transform -rotate-90 w-32 h-32">
+                  <circle
+                    cx="64"
+                    cy="64"
+                    r="56"
+                    stroke="#E5E7EB"
+                    strokeWidth="12"
+                    fill="none"
+                  />
+                  {/* 진행 원 */}
+                  <circle
+                    cx="64"
+                    cy="64"
+                    r="56"
+                    stroke="#1E88E5"
+                    strokeWidth="12"
+                    fill="none"
+                    strokeDasharray={`${2 * Math.PI * 56}`}
+                    strokeDashoffset={`${2 * Math.PI * 56 * (1 - Math.min(totalPoints / 50, 1))}`}
+                    strokeLinecap="round"
+                    className="transition-all duration-1000 ease-out"
+                  />
+                </svg>
+                {/* 중앙 텍스트 */}
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="text-center">
+                    <p className="text-3xl font-bold" style={{ color: '#1E88E5' }}>{totalPoints}</p>
+                    <p className="text-xs text-gray-600 font-medium">명</p>
                   </div>
-                ))}
+                </div>
+              </div>
+              <h3 className="text-lg font-bold text-gray-900">총 전도 인원</h3>
+              <p className="text-sm text-gray-600 mt-1">{formatTitleDate(selectedDate)}</p>
+            </div>
+
+            {/* 개인별 전도 인원 리스트 */}
+            {reportData?.per_user_points && reportData.per_user_points.length > 0 && (
+              <div>
+                <h3 className="text-base font-semibold text-gray-700 mb-3">개인별 전도인원</h3>
+                <div className="space-y-2">
+                  {reportData.per_user_points.slice(0, 10).map((user, index) => (
+                    <div
+                      key={user.user_id}
+                      className="flex items-center justify-between py-3 px-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                      onClick={() => {
+                        setSelectedReferrer({
+                          name: user.name,
+                          members: user.referredMembers || []
+                        });
+                        setShowReferralModal(true);
+                      }}
+                    >
+                      <div className="flex items-center space-x-3">
+                        {/* 순위 숫자 */}
+                        <span className="text-sm font-semibold text-gray-600 w-5">
+                          {index + 1}
+                        </span>
+                        {/* 이름 */}
+                        <span className="text-sm font-semibold text-gray-900">
+                          {user.name}
+                        </span>
+                      </div>
+                      {/* 인원 */}
+                      <div className="flex items-center space-x-2">
+                        <span className="text-base font-bold text-primary-600">
+                          {user.points}명
+                        </span>
+                        <i className="ri-arrow-right-s-line text-lg text-gray-400"></i>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* 전도 명단 모달 */}
+        {showReferralModal && selectedReferrer && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-2xl shadow-xl max-w-md w-full max-h-[80vh] flex flex-col">
+              {/* 모달 헤더 */}
+              <div className="p-6 border-b border-gray-200">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h3 className="text-xl font-bold text-gray-900">{selectedReferrer.name}님의 전도 명단</h3>
+                    <p className="text-sm text-gray-600 mt-1">총 {selectedReferrer.members?.length || 0}명</p>
+                  </div>
+                  <button
+                    onClick={() => setShowReferralModal(false)}
+                    className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+                  >
+                    <i className="ri-close-line text-2xl text-gray-700"></i>
+                  </button>
+                </div>
+              </div>
+
+              {/* 모달 내용 */}
+              <div className="p-6 overflow-y-auto flex-1">
+                <div className="space-y-2">
+                  {selectedReferrer.members && selectedReferrer.members.length > 0 ? (
+                    selectedReferrer.members.map((member, index) => (
+                      <div
+                        key={index}
+                        className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg"
+                      >
+                        <div className="flex items-center space-x-3">
+                          <span className="text-sm font-semibold text-gray-600 w-6">
+                            {index + 1}
+                          </span>
+                          <span className="text-sm font-semibold text-gray-900">
+                            {member.name}
+                          </span>
+                        </div>
+                        <span className="text-xs text-gray-600">
+                          {member.phone}
+                        </span>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="py-8 text-center">
+                      <p className="text-sm text-gray-500">전도 명단이 없습니다</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* 모달 푸터 */}
+              <div className="p-6 border-t border-gray-200">
+                <button
+                  onClick={() => setShowReferralModal(false)}
+                  className="w-full py-3 rounded-lg font-semibold text-white transition-colors cursor-pointer"
+                  style={{ backgroundColor: '#1E88E5' }}
+                >
+                  닫기
+                </button>
               </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
       </div>
     </div>
   );
