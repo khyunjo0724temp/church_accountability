@@ -520,12 +520,12 @@ export default function Reports() {
             {/* 개인별 전도 인원 리스트 */}
             {reportData?.per_user_points && reportData.per_user_points.length > 0 && (
               <div>
-                <h3 className="text-base font-semibold text-gray-700 mb-3">개인별 전도인원</h3>
-                <div className="space-y-2">
+                <h3 className="text-sm font-semibold text-gray-700 mb-6">개인별 전도인원</h3>
+                <div className="space-y-3">
                   {reportData.per_user_points.slice(0, 10).map((user, index) => (
                     <div
                       key={user.user_id}
-                      className="flex items-center justify-between py-3 px-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer"
+                      className="flex items-center justify-between py-4 px-5 bg-gray-50/50 hover:bg-gray-100/50 rounded-2xl transition-all cursor-pointer"
                       onClick={() => {
                         setSelectedReferrer({
                           name: user.name,
@@ -534,23 +534,8 @@ export default function Reports() {
                         setShowReferralModal(true);
                       }}
                     >
-                      <div className="flex items-center space-x-3">
-                        {/* 순위 숫자 */}
-                        <span className="text-sm font-semibold text-gray-600 w-5">
-                          {index + 1}
-                        </span>
-                        {/* 이름 */}
-                        <span className="text-sm font-semibold text-gray-900">
-                          {user.name}
-                        </span>
-                      </div>
-                      {/* 인원 */}
-                      <div className="flex items-center space-x-2">
-                        <span className="text-base font-bold text-primary-600">
-                          {user.points}명
-                        </span>
-                        <i className="ri-arrow-right-s-line text-lg text-gray-400"></i>
-                      </div>
+                      <span className="text-base font-semibold text-gray-900">{user.name}</span>
+                      <span className="text-sm font-mono text-gray-500">{user.points}명</span>
                     </div>
                   ))}
                 </div>
