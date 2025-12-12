@@ -723,15 +723,15 @@ export default function Attendance() {
             <div className="space-y-4">
               {/* 새신자 섹션 */}
               {newbieMembers.length > 0 && (
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
                   <button
                     onClick={() => toggleSection('newbies')}
-                    className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
+                    className="w-full flex items-center justify-between p-4 bg-white hover:bg-gray-50 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center space-x-3">
-                      <i className={`ri-arrow-${expandedSections.has('newbies') ? 'down' : 'right'}-s-line text-xl text-gray-700`}></i>
-                      <h4 className="font-bold text-gray-800">새신자 명단</h4>
-                      <span className="text-sm text-gray-600">
+                      <i className={`ri-arrow-${expandedSections.has('newbies') ? 'down' : 'right'}-s-line text-xl text-gray-900`}></i>
+                      <h4 className="font-bold text-gray-900">새신자 명단</h4>
+                      <span className="text-sm text-gray-500">
                         ({newbieMembers.filter(m => attendance.get(m.id)).length}/{newbieMembers.length} 출석)
                       </span>
                     </div>
@@ -788,15 +788,15 @@ export default function Attendance() {
 
               {/* 팀장 섹션 */}
               {teamLeaderMembers.length > 0 && (
-                <div className="border border-gray-200 rounded-xl overflow-hidden">
+                <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
                   <button
                     onClick={() => toggleSection('teamleader')}
-                    className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
+                    className="w-full flex items-center justify-between p-4 bg-white hover:bg-gray-50 transition-colors cursor-pointer"
                   >
                     <div className="flex items-center space-x-3">
-                      <i className={`ri-arrow-${expandedSections.has('teamleader') ? 'down' : 'right'}-s-line text-xl text-gray-700`}></i>
-                      <h4 className="font-bold text-gray-800">팀장</h4>
-                      <span className="text-sm text-gray-600">
+                      <i className={`ri-arrow-${expandedSections.has('teamleader') ? 'down' : 'right'}-s-line text-xl text-gray-900`}></i>
+                      <h4 className="font-bold text-gray-900">팀장</h4>
+                      <span className="text-sm text-gray-500">
                         ({teamLeaderMembers.filter(m => attendance.get(m.id)).length}/{teamLeaderMembers.length} 출석)
                       </span>
                     </div>
@@ -858,15 +858,15 @@ export default function Attendance() {
                 const presentInGroup = groupMembers.filter(m => attendance.get(m.id)).length;
 
                 return (
-                  <div key={leaderId} className="border border-gray-200 rounded-xl overflow-hidden">
+                  <div key={leaderId} className="border border-gray-200 rounded-xl overflow-hidden bg-white">
                     <button
                       onClick={() => toggleSection(leaderId)}
-                      className="w-full flex items-center justify-between p-4 bg-gray-50 hover:bg-gray-100 transition-colors cursor-pointer"
+                      className="w-full flex items-center justify-between p-4 bg-white hover:bg-gray-50 transition-colors cursor-pointer"
                     >
                       <div className="flex items-center space-x-3">
-                        <i className={`ri-arrow-${expandedSections.has(leaderId) ? 'down' : 'right'}-s-line text-xl text-gray-700`}></i>
-                        <h4 className="font-bold text-gray-800">{leaderName} 구역 재정명단</h4>
-                        <span className="text-sm text-gray-600">
+                        <i className={`ri-arrow-${expandedSections.has(leaderId) ? 'down' : 'right'}-s-line text-xl text-gray-900`}></i>
+                        <h4 className="font-bold text-gray-900">{leaderName} 구역 재정명단</h4>
+                        <span className="text-sm text-gray-500">
                           ({presentInGroup}/{groupMembers.length} 출석)
                         </span>
                       </div>
