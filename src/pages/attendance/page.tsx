@@ -622,23 +622,13 @@ export default function Attendance() {
             </button>
             <button
               onClick={() => {
-                navigate('/attendance-list');
-                setSidebarOpen(false);
-              }}
-              className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-medium cursor-pointer whitespace-nowrap transition-colors"
-            >
-              <i className="ri-file-list-3-line text-xl text-gray-600"></i>
-              <span className="text-gray-900">재적 명단</span>
-            </button>
-            <button
-              onClick={() => {
                 navigate('/reports');
                 setSidebarOpen(false);
               }}
               className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-medium cursor-pointer whitespace-nowrap transition-colors"
             >
-              <i className="ri-user-add-line text-xl text-gray-600"></i>
-              <span className="text-gray-900">전도 명단</span>
+              <i className="ri-bar-chart-line text-xl text-gray-600"></i>
+              <span className="text-gray-900">출석 & 전도</span>
             </button>
           </div>
         </div>
