@@ -48,8 +48,13 @@ export default function PastorDashboard() {
     }
   };
 
-  const handleTeamClick = (teamId: string) => {
-    navigate(`/reports?team_id=${teamId}`);
+  const handleTeamClick = (teamId: string | null) => {
+    if (teamId === null) {
+      // 전체보기: team_id 파라미터 없이 이동 (모든 팀 데이터)
+      navigate('/reports?view=all');
+    } else {
+      navigate(`/reports?team_id=${teamId}`);
+    }
   };
 
   const handleLogout = () => {
@@ -102,6 +107,22 @@ export default function PastorDashboard() {
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {/* 전체보기 카드 */}
+            <div
+              onClick={() => handleTeamClick(null)}
+              className="bg-gradient-to-br from-blue-500 to-indigo-600 rounded-2xl shadow-sm hover:shadow-lg transition-all cursor-pointer border border-blue-400 p-6 group"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="w-12 h-12 bg-white/20 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform">
+                  <i className="ri-dashboard-line text-2xl text-white"></i>
+                </div>
+                <i className="ri-arrow-right-line text-xl text-white/80 group-hover:text-white group-hover:translate-x-1 transition-all"></i>
+              </div>
+              <h3 className="text-xl font-bold text-white">전체보기</h3>
+              <p className="text-sm text-white/80 mt-1">모든 팀 통합 현황</p>
+            </div>
+
+            {/* 개별 팀 카드들 */}
             {teams.map((team) => (
               <div
                 key={team.id}

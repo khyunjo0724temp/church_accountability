@@ -128,19 +128,29 @@ export default function Reports() {
 
       const user = JSON.parse(userData);
 
-      // URL 파라미터에서 team_id 가져오기 (목사님이 특정 팀 조회할 때)
-      // 없으면 로그인한 사용자의 team_id 사용
-      const teamId = searchParams.get('team_id') || user.team_id;
+      // URL 파라미터 확인
+      const viewAll = searchParams.get('view') === 'all'; // 전체보기 여부
+      const teamIdParam = searchParams.get('team_id');
+
+      let teamId = null;
+      if (!viewAll) {
+        // 전체보기가 아니면 team_id 사용 (없으면 사용자 팀)
+        teamId = teamIdParam || user.team_id;
+      }
 
       // 팀 정보 가져오기
-      const { data: teamData } = await supabase
-        .from('teams')
-        .select('name')
-        .eq('id', teamId)
-        .single();
+      if (viewAll) {
+        setTeamName('전체 팀');
+      } else {
+        const { data: teamData } = await supabase
+          .from('teams')
+          .select('name')
+          .eq('id', teamId)
+          .single();
 
-      if (teamData) {
-        setTeamName(teamData.name);
+        if (teamData) {
+          setTeamName(teamData.name);
+        }
       }
 
       let startDate = '';
@@ -170,35 +180,59 @@ export default function Reports() {
       }
 
       // 출석 기록 가져오기
-      const { data: attendanceData, error: attendanceError } = await supabase
+      let attendanceQuery = supabase
         .from('attendance_records')
         .select('member_id, present, week_start_date')
-        .eq('team_id', teamId)
         .gte('week_start_date', startDate)
         .lte('week_start_date', endDate);
+
+      if (teamId) {
+        attendanceQuery = attendanceQuery.eq('team_id', teamId);
+      }
+
+      const { data: attendanceData, error: attendanceError } = await attendanceQuery;
 
       if (attendanceError) {
         console.error('출석 기록 로드 실패:', attendanceError);
       }
 
       // 전체 멤버 수 가져오기
-      const { data: membersData, error: membersError } = await supabase
+      let membersQuery = supabase
         .from('members')
-        .select('id, name, phone, is_newbie, is_team_leader')
-        .eq('team_id', teamId);
+        .select('id, name, phone, is_newbie, is_team_leader');
+
+      if (teamId) {
+        membersQuery = membersQuery.eq('team_id', teamId);
+      }
+
+      const { data: membersData, error: membersError } = await membersQuery;
 
       if (membersError) {
         console.error('멤버 로드 실패:', membersError);
       }
 
       // referrals 데이터 가져오기
-      const { data: referralsData, error: referralsError } = await supabase
+      let referralsQuery = supabase
         .from('referrals')
-        .select('new_member_id, referrer_id, date')
-        .eq('team_id', teamId);
+        .select('new_member_id, referrer_id, date');
+
+      if (teamId) {
+        referralsQuery = referralsQuery.eq('team_id', teamId);
+      }
+
+      const { data: referralsData, error: referralsError } = await referralsQuery;
 
       if (referralsError) {
         console.error('전도 관계 로드 실패:', referralsError);
+      }
+
+      // users 테이블에서 전도자 정보 가져오기 (members에 없는 팀장들)
+      const { data: usersData, error: usersError } = await supabase
+        .from('users')
+        .select('id, name, phone');
+
+      if (usersError) {
+        console.error('사용자 로드 실패:', usersError);
       }
 
       const totalMembers = membersData?.length || 0;
@@ -287,12 +321,16 @@ export default function Reports() {
       // 점수를 배열로 변환하고 정렬
       const perUserPoints = Array.from(pointsMap.entries()).map(([userId, data]) => {
         const member = membersData?.find(m => m.id === userId);
+        const userAccount = usersData?.find(u => u.id === userId);
         let userName = '알 수 없음';
 
         if (member) {
           userName = member.name;
+        } else if (userAccount) {
+          // members에 없으면 users 테이블에서 확인 (팀장들)
+          userName = userAccount.name;
         } else if (userId === user.id) {
-          // members에 없으면 팀장(로그인한 사용자)인지 확인
+          // 로그인한 사용자인지 확인
           userName = user.name;
         }
 
@@ -391,8 +429,8 @@ export default function Reports() {
     period === 'month' ? (reportData?.totals?.monthlyPoints || 0) :
     (reportData?.totals?.yearlyPoints || 0);
 
-  // 목사님이 조회하는 경우인지 확인 (team_id 파라미터가 있으면 목사님 조회)
-  const isPastorView = searchParams.get('team_id') !== null;
+  // 목사님이 조회하는 경우인지 확인 (team_id 파라미터가 있거나 view=all이면 목사님 조회)
+  const isPastorView = searchParams.get('team_id') !== null || searchParams.get('view') === 'all';
 
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(to bottom, #FAFAFA 0%, #FFFFFF 100%)' }}>

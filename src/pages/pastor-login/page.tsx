@@ -15,7 +15,7 @@ export default function PastorLogin() {
     setError('');
 
     try {
-      // 목사님 계정 확인
+      // 관리자 계정 확인
       const { data: pastor, error: pastorError } = await supabase
         .from('users')
         .select('*')
@@ -24,13 +24,13 @@ export default function PastorLogin() {
         .single();
 
       if (pastorError || !pastor) {
-        setError('목사님 계정 정보가 올바르지 않습니다');
+        setError('관리자 계정 정보가 올바르지 않습니다');
         return;
       }
 
       // 비밀번호 확인
       if (pastor.pin_hash !== formData.password) {
-        setError('목사님 계정 정보가 올바르지 않습니다');
+        setError('관리자 계정 정보가 올바르지 않습니다');
         return;
       }
 
@@ -53,7 +53,7 @@ export default function PastorLogin() {
           </div>
 
           <h1 className="text-2xl font-bold text-center text-white mb-2">
-            목사님 로그인
+            관리자 로그인
           </h1>
           <p className="text-center text-blue-200 text-sm mb-8">
             Pastor Dashboard Access
@@ -98,7 +98,7 @@ export default function PastorLogin() {
               type="submit"
               className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium py-3 rounded-lg transition-all transform hover:scale-105 cursor-pointer"
             >
-              목사님 대시보드 접속
+              관리자 대시보드 접속
             </button>
           </form>
 
