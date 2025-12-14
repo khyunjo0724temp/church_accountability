@@ -36,7 +36,7 @@ export default function PastorLogin() {
 
       // 세션 저장
       localStorage.setItem('user', JSON.stringify(pastor));
-      navigate('/pastor-dashboard');
+      navigate('/reports?view=all');
     } catch (err) {
       setError('로그인에 실패했습니다: ' + (err as Error).message);
     }

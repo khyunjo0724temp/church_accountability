@@ -30,8 +30,13 @@ interface ReportData {
     regularAbsent: number;
     regularAttendees: Array<{ id: string; name: string; phone: string }>;
     newbieAttendees: Array<{ id: string; name: string; phone: string }>;
-    absentees: Array<{ id: string; name: string; phone: string }>;
+    absentees: Array<{ id: string; name: string; phone: string; absence_reason?: string }>;
   };
+}
+
+interface Team {
+  id: string;
+  name: string;
 }
 
 export default function Reports() {
@@ -48,7 +53,9 @@ export default function Reports() {
     members: Array<{ name: string; phone: string; date: string }>;
   } | null>(null);
   const [showListModal, setShowListModal] = useState(false);
-  const [listModalData, setListModalData] = useState<{ title: string; members: Array<{ name: string; phone: string }> } | null>(null);
+  const [listModalData, setListModalData] = useState<{ title: string; members: Array<{ name: string; phone: string; absence_reason?: string }> } | null>(null);
+  const [teams, setTeams] = useState<Team[]>([]);
+  const [user, setUser] = useState<any>(null);
 
   function getThisSunday(): Date {
     const today = new Date();
@@ -63,8 +70,36 @@ export default function Reports() {
   const [selectedDate, setSelectedDate] = useState(getThisSunday());
 
   useEffect(() => {
+    // 초기 로드 시 user와 teams 가져오기
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      const parsedUser = JSON.parse(userData);
+      setUser(parsedUser);
+
+      // pastor인 경우 teams 목록 가져오기
+      if (parsedUser.role === 'pastor') {
+        fetchTeams();
+      }
+    }
+  }, []);
+
+  useEffect(() => {
     fetchReport();
-  }, [period, selectedDate]);
+  }, [period, selectedDate, searchParams]);
+
+  const fetchTeams = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('teams')
+        .select('*')
+        .order('name', { ascending: true });
+
+      if (error) throw error;
+      setTeams(data || []);
+    } catch (err) {
+      console.error('Error fetching teams:', err);
+    }
+  };
 
   function formatDisplayDate(date: Date): string {
     if (period === 'week') {
@@ -182,7 +217,7 @@ export default function Reports() {
       // 출석 기록 가져오기
       let attendanceQuery = supabase
         .from('attendance_records')
-        .select('member_id, present, week_start_date')
+        .select('member_id, present, week_start_date, absence_reason')
         .gte('week_start_date', startDate)
         .lte('week_start_date', endDate);
 
@@ -371,17 +406,19 @@ export default function Reports() {
           })) || [];
 
         // 재적 결석자 명단
-        const absentMemberIds = attendanceData
-          ?.filter(r => !r.present)
-          .map(r => r.member_id) || [];
+        const absentRecords = attendanceData?.filter(r => !r.present) || [];
 
         const absenteesWithId = membersData
-          ?.filter(m => !m.is_newbie && absentMemberIds.includes(m.id))
-          .map(m => ({
-            id: m.id,
-            name: m.name,
-            phone: (m as any).phone || ''
-          })) || [];
+          ?.filter(m => !m.is_newbie && absentRecords.some(r => r.member_id === m.id))
+          .map(m => {
+            const record = absentRecords.find(r => r.member_id === m.id);
+            return {
+              id: m.id,
+              name: m.name,
+              phone: (m as any).phone || '',
+              absence_reason: (record as any)?.absence_reason || undefined
+            };
+          }) || [];
 
         // 재적 결석 수 계산
         const regularAbsent = attendanceData?.filter(r => {
@@ -429,84 +466,140 @@ export default function Reports() {
     period === 'month' ? (reportData?.totals?.monthlyPoints || 0) :
     (reportData?.totals?.yearlyPoints || 0);
 
-  // 목사님이 조회하는 경우인지 확인 (team_id 파라미터가 있거나 view=all이면 목사님 조회)
-  const isPastorView = searchParams.get('team_id') !== null || searchParams.get('view') === 'all';
+  // 목사님인지 확인
+  const isPastor = user?.role === 'pastor';
+  // 현재 보고 있는 뷰 확인
+  const viewAll = searchParams.get('view') === 'all';
+  const currentTeamId = searchParams.get('team_id');
 
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(to bottom, #FAFAFA 0%, #FFFFFF 100%)' }}>
-      {/* 헤더 (목사님 조회시에는 숨김) */}
-      {!isPastorView && (
-        <nav className="bg-white/80 backdrop-blur-lg" style={{ borderBottom: '1px solid rgba(0, 0, 0, 0.06)' }}>
-          <div className="max-w-md mx-auto px-5 h-14 flex items-center justify-between">
-            <div className="flex items-center">
-              <img
-                src="https://public.readdy.ai/ai/img_res/6f5f4709-4636-4b57-8f60-15ce4bfa71df.png"
-                alt="로고"
-                className="h-7 w-auto object-contain"
-              />
-            </div>
-            <button
-              onClick={() => setSidebarOpen(true)}
-              className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
-            >
-              <i className="ri-menu-line text-xl text-gray-700"></i>
-            </button>
+      {/* 헤더 */}
+      <nav className="bg-white/80 backdrop-blur-lg" style={{ borderBottom: '1px solid rgba(0, 0, 0, 0.06)' }}>
+        <div className="max-w-md mx-auto px-5 h-14 flex items-center justify-between">
+          <div className="flex items-center">
+            <img
+              src="https://public.readdy.ai/ai/img_res/6f5f4709-4636-4b57-8f60-15ce4bfa71df.png"
+              alt="로고"
+              className="h-7 w-auto object-contain"
+            />
           </div>
-        </nav>
-      )}
+          <button
+            onClick={() => setSidebarOpen(true)}
+            className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
+          >
+            <i className="ri-menu-line text-xl text-gray-700"></i>
+          </button>
+        </div>
+      </nav>
 
-      {/* Sidebar Overlay (목사님 조회시에는 숨김) */}
-      {!isPastorView && sidebarOpen && (
+      {/* Sidebar Overlay */}
+      {sidebarOpen && (
         <div
           className="fixed inset-0 bg-black bg-opacity-50 z-40"
           onClick={() => setSidebarOpen(false)}
         ></div>
       )}
 
-      {/* Sidebar (목사님 조회시에는 숨김) */}
-      {!isPastorView && (
-        <div
-          className={`fixed top-0 right-0 h-full w-64 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
-            sidebarOpen ? 'translate-x-0' : 'translate-x-full'
-          }`}
-        >
-          <div className="p-6">
-            <div className="flex justify-between items-center mb-8">
-              <h2 className="text-lg font-bold text-gray-900">메뉴</h2>
-              <button
-                onClick={() => setSidebarOpen(false)}
-                className="p-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
-              >
-                <i className="ri-close-line text-2xl text-gray-900"></i>
-              </button>
-            </div>
+      {/* Sidebar */}
+      <div
+        className={`fixed top-0 right-0 h-full w-64 bg-white shadow-2xl z-50 transform transition-transform duration-300 ease-in-out ${
+          sidebarOpen ? 'translate-x-0' : 'translate-x-full'
+        }`}
+      >
+        <div className="p-6">
+          <div className="flex justify-between items-center mb-8">
+            <h2 className="text-lg font-bold text-gray-900">메뉴</h2>
+            <button
+              onClick={() => setSidebarOpen(false)}
+              className="p-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
+            >
+              <i className="ri-close-line text-2xl text-gray-900"></i>
+            </button>
+          </div>
 
-            <div className="space-y-2">
-              <button
-                onClick={() => {
-                  navigate('/attendance');
-                  setSidebarOpen(false);
-                }}
-                className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-medium cursor-pointer whitespace-nowrap transition-colors"
-              >
-                <i className="ri-checkbox-circle-line text-xl text-gray-600"></i>
-                <span className="text-gray-900">출석 체크</span>
-              </button>
-              <button
-                onClick={() => {
-                  navigate('/reports');
-                  setSidebarOpen(false);
-                }}
-                className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors"
-                style={{ backgroundColor: '#1E88E5', color: 'white' }}
-              >
-                <i className="ri-bar-chart-line text-xl" style={{ color: 'white' }}></i>
-                <span style={{ color: 'white' }}>출석 & 전도</span>
-              </button>
-            </div>
+          <div className="space-y-2">
+            {isPastor ? (
+              <>
+                {/* 목사님 메뉴: 전체 + 팀 목록 */}
+                <button
+                  onClick={() => {
+                    navigate('/reports?view=all');
+                    setSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors ${
+                    viewAll
+                      ? 'text-white'
+                      : 'hover:bg-gray-50 text-gray-700'
+                  }`}
+                  style={viewAll ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
+                >
+                  <i className={`ri-dashboard-line text-xl ${viewAll ? 'text-white' : 'text-gray-600'}`}></i>
+                  <span className={viewAll ? 'text-white' : 'text-gray-900'}>전체</span>
+                </button>
+
+                {teams.map((team) => (
+                  <button
+                    key={team.id}
+                    onClick={() => {
+                      navigate(`/reports?team_id=${team.id}`);
+                      setSidebarOpen(false);
+                    }}
+                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-medium cursor-pointer whitespace-nowrap transition-colors ${
+                      currentTeamId === team.id
+                        ? 'text-white'
+                        : 'hover:bg-gray-50 text-gray-700'
+                    }`}
+                    style={currentTeamId === team.id ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
+                  >
+                    <i className={`ri-team-line text-xl ${currentTeamId === team.id ? 'text-white' : 'text-gray-600'}`}></i>
+                    <span className={currentTeamId === team.id ? 'text-white' : 'text-gray-900'}>{team.name}</span>
+                  </button>
+                ))}
+              </>
+            ) : (
+              <>
+                {/* 팀장 메뉴: 출석 체크, 출석 & 전도 */}
+                <button
+                  onClick={() => {
+                    navigate('/attendance');
+                    setSidebarOpen(false);
+                  }}
+                  className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-medium cursor-pointer whitespace-nowrap transition-colors"
+                >
+                  <i className="ri-checkbox-circle-line text-xl text-gray-600"></i>
+                  <span className="text-gray-900">출석 체크</span>
+                </button>
+                <button
+                  onClick={() => {
+                    navigate('/reports');
+                    setSidebarOpen(false);
+                  }}
+                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors"
+                  style={{ backgroundColor: '#1E88E5', color: 'white' }}
+                >
+                  <i className="ri-bar-chart-line text-xl" style={{ color: 'white' }}></i>
+                  <span style={{ color: 'white' }}>출석 & 전도</span>
+                </button>
+              </>
+            )}
+          </div>
+
+          {/* 로그아웃 버튼 */}
+          <div className="absolute bottom-6 left-6 right-6">
+            <button
+              onClick={() => {
+                localStorage.removeItem('user');
+                navigate(isPastor ? '/pastor-login' : '/login');
+              }}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-medium cursor-pointer transition-colors"
+            >
+              <i className="ri-logout-box-line text-xl"></i>
+              <span>로그아웃</span>
+            </button>
           </div>
         </div>
-      )}
+      </div>
 
       {/* 메인 콘텐츠 */}
       <div className="max-w-md mx-auto px-5 py-5">
@@ -615,7 +708,7 @@ export default function Reports() {
                 className="flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50/50 transition-all cursor-pointer"
                 onClick={() => {
                   setListModalData({
-                    title: '재적 출석',
+                    title: `${formatTitleDate(selectedDate)} 재적 출석(${teamName})`,
                     members: reportData.weeklyAttendance?.regularAttendees || []
                   });
                   setShowListModal(true);
@@ -640,7 +733,7 @@ export default function Reports() {
                 className="flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50/50 transition-all cursor-pointer"
                 onClick={() => {
                   setListModalData({
-                    title: '새신자 출석',
+                    title: `${formatTitleDate(selectedDate)} 새신자 출석(${teamName})`,
                     members: reportData.weeklyAttendance?.newbieAttendees || []
                   });
                   setShowListModal(true);
@@ -665,7 +758,7 @@ export default function Reports() {
                 className="flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50/50 transition-all cursor-pointer"
                 onClick={() => {
                   setListModalData({
-                    title: '재적 결석',
+                    title: `${formatTitleDate(selectedDate)} 재적 결석(${teamName})`,
                     members: reportData.weeklyAttendance?.absentees || []
                   });
                   setShowListModal(true);
@@ -726,13 +819,13 @@ export default function Reports() {
                   </div>
                 </div>
               </div>
-              <h3 className="text-lg font-bold text-gray-900">{teamName} {formatTitleDate(selectedDate)} 총 전도 인원</h3>
+              <h3 className="text-lg font-bold text-gray-900">{formatTitleDate(selectedDate)} 총 전도인원 ({teamName})</h3>
             </div>
 
             {/* 개인별 전도 인원 리스트 */}
             {reportData?.per_user_points && reportData.per_user_points.length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-6">개인별 전도인원</h3>
+                <h3 className="text-sm font-semibold text-gray-700 mb-6">{teamName} 개인별 전도인원</h3>
                 <div className="space-y-3">
                   {reportData.per_user_points.slice(0, 10).map((user, index) => (
                     <div
@@ -863,7 +956,7 @@ export default function Reports() {
                           </span>
                         </div>
                         <span className="text-xs text-gray-600">
-                          {member.phone}
+                          {member.absence_reason || '개인사정'}
                         </span>
                       </div>
                     ))
