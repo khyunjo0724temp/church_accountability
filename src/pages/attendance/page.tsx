@@ -930,7 +930,7 @@ export default function Attendance() {
                     >
                       <div className="flex items-center space-x-3">
                         <i className={`ri-arrow-${expandedSections.has(leaderId) ? 'down' : 'right'}-s-line text-xl text-gray-900`}></i>
-                        <h4 className="font-bold text-gray-900">{leaderName} 구역 재정명단</h4>
+                        <h4 className="font-bold text-gray-900">{leaderName} 구역 재적명단</h4>
                         <span className="text-sm text-gray-500">
                           ({presentInGroup}/{groupMembers.length} 출석)
                         </span>
@@ -963,14 +963,7 @@ export default function Attendance() {
                                 ></i>
                               </div>
                               <div className="flex-1">
-                                <div className="flex items-center space-x-2">
-                                  <p className="font-medium text-gray-800">{member.name}</p>
-                                  {member.is_zone_leader && (
-                                    <span className="px-2 py-0.5 bg-gray-200 text-gray-700 text-xs font-medium rounded whitespace-nowrap">
-                                      구역장
-                                    </span>
-                                  )}
-                                </div>
+                                <p className="font-medium text-gray-800">{member.name}</p>
                               </div>
                             </div>
                             <div className="flex items-center space-x-2">
