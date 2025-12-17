@@ -77,7 +77,7 @@ export default defineConfig({
         name: '교회 출석 관리',
         short_name: '출석관리',
         description: '교회 출석 및 전도 관리 시스템',
-        theme_color: '#1E88E5',
+        theme_color: '#ffffff',
         background_color: '#ffffff',
         display: 'standalone',
         orientation: 'portrait',
