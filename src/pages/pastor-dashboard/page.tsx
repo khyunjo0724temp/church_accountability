@@ -78,7 +78,7 @@ export default function PastorDashboard() {
           <div className="flex justify-between items-center py-4">
             <div className="flex items-center">
               <img
-                src="https://public.readdy.ai/ai/img_res/6f5f4709-4636-4b57-8f60-15ce4bfa71df.png"
+                src="/logo.png"
                 alt="교회 로고"
                 className="h-8 w-auto object-contain"
               />

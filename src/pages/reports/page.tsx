@@ -479,9 +479,9 @@ export default function Reports() {
         <div className="max-w-md mx-auto px-5 h-14 flex items-center justify-between">
           <div className="flex items-center">
             <img
-              src="https://public.readdy.ai/ai/img_res/6f5f4709-4636-4b57-8f60-15ce4bfa71df.png"
+              src="/logo.png"
               alt="로고"
-              className="h-7 w-auto object-contain"
+              className="h-10 w-auto object-contain"
             />
           </div>
           <button

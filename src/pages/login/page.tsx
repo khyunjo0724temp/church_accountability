@@ -129,9 +129,9 @@ export default function Login() {
       <div className="w-full max-w-md">
         <div className="bg-white rounded-2xl shadow-xl p-8">
           <div className="flex justify-center mb-8">
-            <img 
-              src="https://public.readdy.ai/ai/img_res/6f5f4709-4636-4b57-8f60-15ce4bfa71df.png" 
-              alt="교회 로고" 
+            <img
+              src="/logo.png"
+              alt="교회 로고"
               className="h-20 w-auto object-contain"
             />
           </div>

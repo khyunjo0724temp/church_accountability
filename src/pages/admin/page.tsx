@@ -120,7 +120,7 @@ export default function Admin() {
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center space-x-3">
               <img
-                src="https://public.readdy.ai/ai/img_res/6f5f4709-4636-4b57-8f60-15ce4bfa71df.png"
+                src="/logo.png"
                 alt="로고"
                 className="h-10 w-auto object-contain"
               />
