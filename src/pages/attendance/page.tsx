@@ -34,7 +34,7 @@ export default function Attendance() {
     zone_leader_id: '',
     referrer_id: ''
   });
-  const [expandedSections, setExpandedSections] = useState<Set<string>>(new Set());
+  const [activeTab, setActiveTab] = useState<string>('newbies');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [teamName, setTeamName] = useState('');
@@ -509,18 +509,6 @@ export default function Attendance() {
     setEditingMember(null);
   };
 
-  const toggleSection = (sectionId: string) => {
-    setExpandedSections(prev => {
-      const newSet = new Set(prev);
-      if (newSet.has(sectionId)) {
-        newSet.delete(sectionId);
-      } else {
-        newSet.add(sectionId);
-      }
-      return newSet;
-    });
-  };
-
   // 멤버를 그룹화
   // 새신자를 정렬: 전도자별로 그룹화하고, 출석한 사람이 위로 (저장된 출석 상태 기준)
   const newbieMembers = (() => {
@@ -737,300 +725,282 @@ export default function Attendance() {
               <p className="text-gray-600">등록된 멤버가 없습니다</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {/* 새신자 섹션 */}
-              {newbieMembers.length > 0 && (
-                <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+            <div>
+              {/* 탭 카테고리 */}
+              <div className="flex overflow-x-auto gap-2 mb-4 pb-2 -mx-1 px-1" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
+                {newbieMembers.length > 0 && (
                   <button
-                    onClick={() => toggleSection('newbies')}
-                    className="w-full flex items-center justify-between p-4 bg-white hover:bg-gray-50 transition-colors cursor-pointer"
+                    onClick={() => setActiveTab('newbies')}
+                    className="px-5 py-2.5 whitespace-nowrap transition-all cursor-pointer text-sm font-medium"
+                    style={{
+                      backgroundColor: activeTab === 'newbies' ? '#2D2D2D' : 'white',
+                      color: activeTab === 'newbies' ? 'white' : '#000000',
+                      border: activeTab === 'newbies' ? 'none' : '1px solid #E5E7EB',
+                      borderRadius: '999px'
+                    }}
                   >
-                    <div className="flex items-center space-x-3">
-                      <i className={`ri-arrow-${expandedSections.has('newbies') ? 'down' : 'right'}-s-line text-xl text-gray-900`}></i>
-                      <h4 className="font-bold text-gray-900">새신자 명단</h4>
-                      <span className="text-sm text-gray-500">
-                        ({newbieMembers.filter(m => attendance.get(m.id)).length}/{newbieMembers.length} 출석)
-                      </span>
-                    </div>
+                    새신자
                   </button>
-                  {expandedSections.has('newbies') && (
-                    <div className="p-3 space-y-2 bg-white">
-                      {newbieMembers.map((member) => (
-                        <div
-                          key={member.id}
-                          className="flex items-center justify-between p-3 border border-gray-200 hover:border-gray-300 rounded-xl transition-all"
-                        >
-                          <div
-                            className="flex items-center space-x-4 flex-1 cursor-pointer"
-                            onClick={() => toggleAttendance(member.id)}
-                          >
-                            <div
-                              className="w-6 h-6 rounded-md border-2 flex items-center justify-center relative"
-                              style={{
-                                backgroundColor: attendance.get(member.id) ? '#1E88E5' : 'white',
-                                borderColor: attendance.get(member.id) ? '#1E88E5' : '#D1D5DB'
-                              }}
-                            >
-                              <i
-                                className="ri-check-line text-white text-lg absolute"
-                                style={{
-                                  opacity: attendance.get(member.id) ? 1 : 0,
-                                  transition: 'opacity 0.2s'
-                                }}
-                              ></i>
-                            </div>
-                            <div className="flex-1">
-                              <p className="font-medium text-gray-800">{member.name}</p>
-                              {member.referrer_name && (
-                                <p className="text-xs text-gray-500 mt-1">전도자: {member.referrer_name}</p>
-                              )}
-                            </div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            {/* 결석 시 사유 선택 */}
-                            {!attendance.get(member.id) && (
-                              <div onClick={(e) => e.stopPropagation()}>
-                                <select
-                                  value={absenceReasons.get(member.id) || ''}
-                                  onChange={(e) => {
-                                    const value = e.target.value;
-                                    if (value === 'custom') {
-                                      const customReason = prompt('결석 사유를 입력하세요:');
-                                      if (customReason) {
-                                        setAbsenceReasons(prev => {
-                                          const newMap = new Map(prev);
-                                          newMap.set(member.id, customReason);
-                                          return newMap;
-                                        });
-                                      }
-                                    } else {
-                                      setAbsenceReasons(prev => {
-                                        const newMap = new Map(prev);
-                                        if (value) {
-                                          newMap.set(member.id, value);
-                                        } else {
-                                          newMap.delete(member.id);
-                                        }
-                                        return newMap;
-                                      });
-                                    }
-                                  }}
-                                  className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl cursor-pointer appearance-none transition-colors"
-                                  style={{
-                                    minWidth: '100px',
-                                    backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                                    backgroundPosition: 'right 0.5rem center',
-                                    backgroundRepeat: 'no-repeat',
-                                    backgroundSize: '1.5em 1.5em',
-                                    paddingRight: '2.5rem'
-                                  }}
-                                >
-                                  <option value="개인사정">개인사정</option>
-                                  <option value="타지">타지</option>
-                                  <option value="질병">질병</option>
-                                  <option value="출장">출장</option>
-                                  <option value="custom">기타</option>
-                                </select>
-                              </div>
-                            )}
-                            <button
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                openEditModal(member);
-                              }}
-                              className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors cursor-pointer"
-                              title="수정"
-                            >
-                              <i className="ri-edit-line text-lg"></i>
-                            </button>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 팀장 섹션 */}
-              {teamLeaderMembers.length > 0 && (
-                <div className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                )}
+                {teamLeaderMembers.length > 0 && (
                   <button
-                    onClick={() => toggleSection('teamleader')}
-                    className="w-full flex items-center justify-between p-4 bg-white hover:bg-gray-50 transition-colors cursor-pointer"
+                    onClick={() => setActiveTab('teamleader')}
+                    className="px-5 py-2.5 whitespace-nowrap transition-all cursor-pointer text-sm font-medium"
+                    style={{
+                      backgroundColor: activeTab === 'teamleader' ? '#2D2D2D' : 'white',
+                      color: activeTab === 'teamleader' ? 'white' : '#000000',
+                      border: activeTab === 'teamleader' ? 'none' : '1px solid #E5E7EB',
+                      borderRadius: '999px'
+                    }}
                   >
-                    <div className="flex items-center space-x-3">
-                      <i className={`ri-arrow-${expandedSections.has('teamleader') ? 'down' : 'right'}-s-line text-xl text-gray-900`}></i>
-                      <h4 className="font-bold text-gray-900">팀장</h4>
-                      <span className="text-sm text-gray-500">
-                        ({teamLeaderMembers.filter(m => attendance.get(m.id)).length}/{teamLeaderMembers.length} 출석)
-                      </span>
-                    </div>
+                    팀장
                   </button>
-                  {expandedSections.has('teamleader') && (
-                    <div className="p-3 space-y-2 bg-white">
-                      {teamLeaderMembers.map((member) => (
-                        <div
-                          key={member.id}
-                          className="flex items-center justify-between p-3 border border-gray-200 hover:border-gray-300 rounded-xl transition-all"
-                        >
-                          <div
-                            className="flex items-center space-x-4 flex-1 cursor-pointer"
-                            onClick={() => toggleAttendance(member.id)}
-                          >
-                            <div
-                              className="w-6 h-6 rounded-md border-2 flex items-center justify-center relative"
-                              style={{
-                                backgroundColor: attendance.get(member.id) ? '#1E88E5' : 'white',
-                                borderColor: attendance.get(member.id) ? '#1E88E5' : '#D1D5DB'
-                              }}
-                            >
-                              <i
-                                className="ri-check-line text-white text-lg absolute"
-                                style={{
-                                  opacity: attendance.get(member.id) ? 1 : 0,
-                                  transition: 'opacity 0.2s'
-                                }}
-                              ></i>
-                            </div>
-                            <div>
-                              <p className="font-medium text-gray-800">{member.name}</p>
-                              {member.referrer_name && (
-                                <p className="text-xs text-gray-500 mt-1">전도자: {member.referrer_name}</p>
-                              )}
-                            </div>
-                          </div>
-                          <button
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              openEditModal(member);
-                            }}
-                            className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors cursor-pointer ml-3"
-                            title="수정"
-                          >
-                            <i className="ri-edit-line text-lg"></i>
-                          </button>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* 구역장별 섹션 */}
-              {Array.from(membersByZoneLeader.entries()).map(([leaderId, groupMembers]) => {
-                const leader = groupMembers.find(m => m.id === leaderId);
-                const leaderName = leader?.name || '알 수 없음';
-                const presentInGroup = groupMembers.filter(m => attendance.get(m.id)).length;
-
-                return (
-                  <div key={leaderId} className="border border-gray-200 rounded-xl overflow-hidden bg-white">
+                )}
+                {Array.from(membersByZoneLeader.entries()).map(([leaderId, groupMembers]) => {
+                  const leader = groupMembers.find(m => m.id === leaderId);
+                  const leaderName = leader?.name || '알 수 없음';
+                  return (
                     <button
-                      onClick={() => toggleSection(leaderId)}
-                      className="w-full flex items-center justify-between p-4 bg-white hover:bg-gray-50 transition-colors cursor-pointer"
+                      key={leaderId}
+                      onClick={() => setActiveTab(leaderId)}
+                      className="px-5 py-2.5 whitespace-nowrap transition-all cursor-pointer text-sm font-medium"
+                      style={{
+                        backgroundColor: activeTab === leaderId ? '#2D2D2D' : 'white',
+                        color: activeTab === leaderId ? 'white' : '#000000',
+                        border: activeTab === leaderId ? 'none' : '1px solid #E5E7EB',
+                        borderRadius: '999px'
+                      }}
                     >
-                      <div className="flex items-center space-x-3">
-                        <i className={`ri-arrow-${expandedSections.has(leaderId) ? 'down' : 'right'}-s-line text-xl text-gray-900`}></i>
-                        <h4 className="font-bold text-gray-900">{leaderName} 구역 재적명단</h4>
-                        <span className="text-sm text-gray-500">
-                          ({presentInGroup}/{groupMembers.length} 출석)
-                        </span>
-                      </div>
+                      {leaderName} 구역
                     </button>
-                    {expandedSections.has(leaderId) && (
-                      <div className="p-3 space-y-2 bg-white">
-                        {groupMembers.map((member) => (
-                          <div
-                            key={member.id}
-                            className="flex items-center justify-between p-3 border border-gray-200 hover:border-gray-300 rounded-xl transition-all"
-                          >
-                            <div
-                              className="flex items-center space-x-4 flex-1 cursor-pointer"
-                              onClick={() => toggleAttendance(member.id)}
-                            >
-                              <div
-                                className="w-6 h-6 rounded-md border-2 flex items-center justify-center relative"
-                                style={{
-                                  backgroundColor: attendance.get(member.id) ? '#1E88E5' : 'white',
-                                  borderColor: attendance.get(member.id) ? '#1E88E5' : '#D1D5DB'
-                                }}
-                              >
-                                <i
-                                  className="ri-check-line text-white text-lg absolute"
-                                  style={{
-                                    opacity: attendance.get(member.id) ? 1 : 0,
-                                    transition: 'opacity 0.2s'
-                                  }}
-                                ></i>
-                              </div>
-                              <div className="flex-1">
-                                <p className="font-medium text-gray-800">{member.name}</p>
-                              </div>
-                            </div>
-                            <div className="flex items-center space-x-2">
-                              {/* 결석 시 사유 선택 */}
-                              {!attendance.get(member.id) && (
-                                <div onClick={(e) => e.stopPropagation()}>
-                                  <select
-                                    value={absenceReasons.get(member.id) || ''}
-                                    onChange={(e) => {
-                                      const value = e.target.value;
-                                      if (value === 'custom') {
-                                        const customReason = prompt('결석 사유를 입력하세요:');
-                                        if (customReason) {
-                                          setAbsenceReasons(prev => {
-                                            const newMap = new Map(prev);
-                                            newMap.set(member.id, customReason);
-                                            return newMap;
-                                          });
-                                        }
-                                      } else {
-                                        setAbsenceReasons(prev => {
-                                          const newMap = new Map(prev);
-                                          if (value) {
-                                            newMap.set(member.id, value);
-                                          } else {
-                                            newMap.delete(member.id);
-                                          }
-                                          return newMap;
-                                        });
-                                      }
-                                    }}
-                                    className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl cursor-pointer appearance-none transition-colors"
-                                    style={{
-                                      minWidth: '100px',
-                                      backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
-                                      backgroundPosition: 'right 0.5rem center',
-                                      backgroundRepeat: 'no-repeat',
-                                      backgroundSize: '1.5em 1.5em',
-                                      paddingRight: '2.5rem'
-                                    }}
-                                  >
-                                    <option value="개인사정">개인사정</option>
-                                    <option value="타지">타지</option>
-                                    <option value="질병">질병</option>
-                                    <option value="출장">출장</option>
-                                    <option value="custom">기타</option>
-                                  </select>
-                                </div>
-                              )}
-                              <button
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  openEditModal(member);
-                                }}
-                                className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors cursor-pointer"
-                                title="수정"
-                              >
-                                <i className="ri-edit-line text-lg"></i>
-                              </button>
-                            </div>
-                          </div>
-                        ))}
+                  );
+                })}
+              </div>
+
+              {/* 선택된 탭의 멤버 목록 */}
+              <div className="space-y-2">
+                {activeTab === 'newbies' && newbieMembers.map((member) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between p-3 border border-gray-200 hover:border-gray-300 rounded-xl transition-all bg-white"
+                  >
+                    <div
+                      className="flex items-center space-x-4 flex-1 cursor-pointer"
+                      onClick={() => toggleAttendance(member.id)}
+                    >
+                      <div
+                        className="w-6 h-6 rounded-md border-2 flex items-center justify-center relative"
+                        style={{
+                          backgroundColor: attendance.get(member.id) ? '#1E88E5' : 'white',
+                          borderColor: attendance.get(member.id) ? '#1E88E5' : '#D1D5DB'
+                        }}
+                      >
+                        <i
+                          className="ri-check-line text-white text-lg absolute"
+                          style={{
+                            opacity: attendance.get(member.id) ? 1 : 0,
+                            transition: 'opacity 0.2s'
+                          }}
+                        ></i>
                       </div>
-                    )}
+                      <div className="flex-1">
+                        <p className="font-medium text-gray-800">{member.name}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      {!attendance.get(member.id) && (
+                        <div onClick={(e) => e.stopPropagation()}>
+                          <select
+                            value={absenceReasons.get(member.id) || ''}
+                            onChange={(e) => {
+                              const value = e.target.value;
+                              if (value === 'custom') {
+                                const customReason = prompt('결석 사유를 입력하세요:');
+                                if (customReason) {
+                                  setAbsenceReasons(prev => {
+                                    const newMap = new Map(prev);
+                                    newMap.set(member.id, customReason);
+                                    return newMap;
+                                  });
+                                }
+                              } else {
+                                setAbsenceReasons(prev => {
+                                  const newMap = new Map(prev);
+                                  if (value) {
+                                    newMap.set(member.id, value);
+                                  } else {
+                                    newMap.delete(member.id);
+                                  }
+                                  return newMap;
+                                });
+                              }
+                            }}
+                            className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl cursor-pointer appearance-none transition-colors"
+                            style={{
+                              minWidth: '100px',
+                              backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                              backgroundPosition: 'right 0.5rem center',
+                              backgroundRepeat: 'no-repeat',
+                              backgroundSize: '1.5em 1.5em',
+                              paddingRight: '2.5rem'
+                            }}
+                          >
+                            <option value="개인사정">개인사정</option>
+                            <option value="타지">타지</option>
+                            <option value="질병">질병</option>
+                            <option value="출장">출장</option>
+                            <option value="custom">기타</option>
+                          </select>
+                        </div>
+                      )}
+                      <button
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          openEditModal(member);
+                        }}
+                        className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors cursor-pointer"
+                        title="수정"
+                      >
+                        <i className="ri-edit-line text-lg"></i>
+                      </button>
+                    </div>
                   </div>
-                );
-              })}
+                ))}
+
+                {activeTab === 'teamleader' && teamLeaderMembers.map((member) => (
+                  <div
+                    key={member.id}
+                    className="flex items-center justify-between p-3 border border-gray-200 hover:border-gray-300 rounded-xl transition-all bg-white"
+                  >
+                    <div
+                      className="flex items-center space-x-4 flex-1 cursor-pointer"
+                      onClick={() => toggleAttendance(member.id)}
+                    >
+                      <div
+                        className="w-6 h-6 rounded-md border-2 flex items-center justify-center relative"
+                        style={{
+                          backgroundColor: attendance.get(member.id) ? '#1E88E5' : 'white',
+                          borderColor: attendance.get(member.id) ? '#1E88E5' : '#D1D5DB'
+                        }}
+                      >
+                        <i
+                          className="ri-check-line text-white text-lg absolute"
+                          style={{
+                            opacity: attendance.get(member.id) ? 1 : 0,
+                            transition: 'opacity 0.2s'
+                          }}
+                        ></i>
+                      </div>
+                      <div>
+                        <p className="font-medium text-gray-800">{member.name}</p>
+                        {member.referrer_name && (
+                          <p className="text-xs text-gray-500 mt-1">전도자: {member.referrer_name}</p>
+                        )}
+                      </div>
+                    </div>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        openEditModal(member);
+                      }}
+                      className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors cursor-pointer ml-3"
+                      title="수정"
+                    >
+                      <i className="ri-edit-line text-lg"></i>
+                    </button>
+                  </div>
+                ))}
+
+                {Array.from(membersByZoneLeader.entries()).map(([leaderId, groupMembers]) => (
+                  activeTab === leaderId && groupMembers.map((member) => (
+                    <div
+                      key={member.id}
+                      className="flex items-center justify-between p-3 border border-gray-200 hover:border-gray-300 rounded-xl transition-all bg-white"
+                    >
+                      <div
+                        className="flex items-center space-x-4 flex-1 cursor-pointer"
+                        onClick={() => toggleAttendance(member.id)}
+                      >
+                        <div
+                          className="w-6 h-6 rounded-md border-2 flex items-center justify-center relative"
+                          style={{
+                            backgroundColor: attendance.get(member.id) ? '#1E88E5' : 'white',
+                            borderColor: attendance.get(member.id) ? '#1E88E5' : '#D1D5DB'
+                          }}
+                        >
+                          <i
+                            className="ri-check-line text-white text-lg absolute"
+                            style={{
+                              opacity: attendance.get(member.id) ? 1 : 0,
+                              transition: 'opacity 0.2s'
+                            }}
+                          ></i>
+                        </div>
+                        <div className="flex-1">
+                          <p className="font-medium text-gray-800">{member.name}</p>
+                        </div>
+                      </div>
+                      <div className="flex items-center space-x-2">
+                        {!attendance.get(member.id) && (
+                          <div onClick={(e) => e.stopPropagation()}>
+                            <select
+                              value={absenceReasons.get(member.id) || ''}
+                              onChange={(e) => {
+                                const value = e.target.value;
+                                if (value === 'custom') {
+                                  const customReason = prompt('결석 사유를 입력하세요:');
+                                  if (customReason) {
+                                    setAbsenceReasons(prev => {
+                                      const newMap = new Map(prev);
+                                      newMap.set(member.id, customReason);
+                                      return newMap;
+                                    });
+                                  }
+                                } else {
+                                  setAbsenceReasons(prev => {
+                                    const newMap = new Map(prev);
+                                    if (value) {
+                                      newMap.set(member.id, value);
+                                    } else {
+                                      newMap.delete(member.id);
+                                    }
+                                    return newMap;
+                                  });
+                                }
+                              }}
+                              className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl cursor-pointer appearance-none transition-colors"
+                              style={{
+                                minWidth: '100px',
+                                backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
+                                backgroundPosition: 'right 0.5rem center',
+                                backgroundRepeat: 'no-repeat',
+                                backgroundSize: '1.5em 1.5em',
+                                paddingRight: '2.5rem'
+                              }}
+                            >
+                              <option value="개인사정">개인사정</option>
+                              <option value="타지">타지</option>
+                              <option value="질병">질병</option>
+                              <option value="출장">출장</option>
+                              <option value="custom">기타</option>
+                            </select>
+                          </div>
+                        )}
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openEditModal(member);
+                          }}
+                          className="p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl transition-colors cursor-pointer"
+                          title="수정"
+                        >
+                          <i className="ri-edit-line text-lg"></i>
+                        </button>
+                      </div>
+                    </div>
+                  ))
+                ))}
+              </div>
             </div>
           )}
         </div>
