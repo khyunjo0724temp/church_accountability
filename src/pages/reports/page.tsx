@@ -29,7 +29,7 @@ interface ReportData {
     newbieAttendance: number;
     regularAbsent: number;
     regularAttendees: Array<{ id: string; name: string; phone: string }>;
-    newbieAttendees: Array<{ id: string; name: string; phone: string }>;
+    newbieAttendees: Array<{ id: string; name: string; phone: string; referrer_name?: string }>;
     absentees: Array<{ id: string; name: string; phone: string; absence_reason?: string }>;
   };
 }
@@ -37,6 +37,7 @@ interface ReportData {
 interface Team {
   id: string;
   name: string;
+  team_color: string;
 }
 
 export default function Reports() {
@@ -53,7 +54,7 @@ export default function Reports() {
     members: Array<{ name: string; phone: string; date: string }>;
   } | null>(null);
   const [showListModal, setShowListModal] = useState(false);
-  const [listModalData, setListModalData] = useState<{ title: string; members: Array<{ name: string; phone: string; absence_reason?: string }> } | null>(null);
+  const [listModalData, setListModalData] = useState<{ title: string; members: Array<{ name: string; phone: string; absence_reason?: string; referrer_name?: string }> } | null>(null);
   const [teams, setTeams] = useState<Team[]>([]);
   const [user, setUser] = useState<any>(null);
 
@@ -165,18 +166,26 @@ export default function Reports() {
 
       // URL 파라미터 확인
       const viewAll = searchParams.get('view') === 'all'; // 전체보기 여부
+      const teamColorParam = searchParams.get('team_color'); // 청팀/백팀
       const teamIdParam = searchParams.get('team_id');
 
       let teamId = null;
-      if (!viewAll) {
-        // 전체보기가 아니면 team_id 사용 (없으면 사용자 팀)
-        teamId = teamIdParam || user.team_id;
-      }
+      let teamIds: string[] = []; // 청팀/백팀 필터링용
 
-      // 팀 정보 가져오기
       if (viewAll) {
         setTeamName('전체 팀');
+      } else if (teamColorParam) {
+        // 청팀 또는 백팀 필터링
+        const { data: colorTeams } = await supabase
+          .from('teams')
+          .select('id, name')
+          .eq('team_color', teamColorParam);
+
+        teamIds = colorTeams?.map(t => t.id) || [];
+        setTeamName(teamColorParam);
       } else {
+        // 개별 팀
+        teamId = teamIdParam || user.team_id;
         const { data: teamData } = await supabase
           .from('teams')
           .select('name')
@@ -215,47 +224,77 @@ export default function Reports() {
       }
 
       // 출석 기록 가져오기
-      let attendanceQuery = supabase
-        .from('attendance_records')
-        .select('member_id, present, week_start_date, absence_reason')
-        .gte('week_start_date', startDate)
-        .lte('week_start_date', endDate);
+      let attendanceData = null;
+      let attendanceError = null;
 
-      if (teamId) {
-        attendanceQuery = attendanceQuery.eq('team_id', teamId);
+      if (viewAll || teamId || (teamIds.length > 0)) {
+        let attendanceQuery = supabase
+          .from('attendance_records')
+          .select('member_id, present, week_start_date, absence_reason')
+          .gte('week_start_date', startDate)
+          .lte('week_start_date', endDate);
+
+        if (teamId) {
+          attendanceQuery = attendanceQuery.eq('team_id', teamId);
+        } else if (teamIds.length > 0) {
+          attendanceQuery = attendanceQuery.in('team_id', teamIds);
+        }
+        // viewAll이면 필터링 안 함
+
+        const result = await attendanceQuery;
+        attendanceData = result.data;
+        attendanceError = result.error;
       }
-
-      const { data: attendanceData, error: attendanceError } = await attendanceQuery;
 
       if (attendanceError) {
         console.error('출석 기록 로드 실패:', attendanceError);
       }
 
       // 전체 멤버 수 가져오기
-      let membersQuery = supabase
-        .from('members')
-        .select('id, name, phone, is_newbie, is_team_leader');
+      let membersData = null;
+      let membersError = null;
 
-      if (teamId) {
-        membersQuery = membersQuery.eq('team_id', teamId);
+      if (viewAll || teamId || (teamIds.length > 0)) {
+        let membersQuery = supabase
+          .from('members')
+          .select('id, name, phone, is_newbie, is_team_leader');
+
+        if (teamId) {
+          membersQuery = membersQuery.eq('team_id', teamId);
+        } else if (teamIds.length > 0) {
+          membersQuery = membersQuery.in('team_id', teamIds);
+        }
+        // viewAll이면 필터링 안 함
+
+        const result = await membersQuery;
+        membersData = result.data;
+        membersError = result.error;
       }
-
-      const { data: membersData, error: membersError } = await membersQuery;
 
       if (membersError) {
         console.error('멤버 로드 실패:', membersError);
       }
 
       // referrals 데이터 가져오기
-      let referralsQuery = supabase
-        .from('referrals')
-        .select('new_member_id, referrer_id, date');
+      let referralsData = null;
+      let referralsError = null;
 
-      if (teamId) {
-        referralsQuery = referralsQuery.eq('team_id', teamId);
+      if (viewAll || teamId || (teamIds.length > 0)) {
+        let referralsQuery = supabase
+          .from('referrals')
+          .select('new_member_id, referrer_id, date');
+
+        if (teamId) {
+          referralsQuery = referralsQuery.eq('team_id', teamId);
+        } else if (teamIds.length > 0) {
+          referralsQuery = referralsQuery.in('team_id', teamIds);
+        }
+        // viewAll이면 필터링 안 함
+
+        const result = await referralsQuery;
+        referralsData = result.data;
+        referralsError = result.error;
       }
-
-      const { data: referralsData, error: referralsError } = await referralsQuery;
 
       if (referralsError) {
         console.error('전도 관계 로드 실패:', referralsError);
@@ -383,42 +422,74 @@ export default function Reports() {
       // 주간 탭일 때만 출석 현황 데이터 추가
       let weeklyAttendanceData = undefined;
       if (period === 'week') {
+        // 중복 제거 헬퍼 함수 (id 기준)
+        const uniqueById = <T extends { id: string }>(arr: T[]): T[] => {
+          const seen = new Set<string>();
+          return arr.filter(item => {
+            if (seen.has(item.id)) {
+              return false;
+            }
+            seen.add(item.id);
+            return true;
+          });
+        };
+
         // 재적 출석자 명단
         const regularAttendeeMemberIds = attendanceData
           ?.filter(r => r.present)
           .map(r => r.member_id) || [];
 
-        const regularAttendees = membersData
-          ?.filter(m => !m.is_newbie && regularAttendeeMemberIds.includes(m.id))
-          .map(m => ({
-            id: m.id,
-            name: m.name,
-            phone: (m as any).phone || ''
-          })) || [];
+        const regularAttendees = uniqueById(
+          membersData
+            ?.filter(m => !m.is_newbie && regularAttendeeMemberIds.includes(m.id))
+            .map(m => ({
+              id: m.id,
+              name: m.name,
+              phone: (m as any).phone || ''
+            })) || []
+        );
 
         // 새신자 출석자 명단
-        const newbieAttendees = membersData
-          ?.filter(m => m.is_newbie && regularAttendeeMemberIds.includes(m.id))
-          .map(m => ({
-            id: m.id,
-            name: m.name,
-            phone: (m as any).phone || ''
-          })) || [];
+        const newbieAttendees = uniqueById(
+          membersData
+            ?.filter(m => m.is_newbie && regularAttendeeMemberIds.includes(m.id))
+            .map(m => {
+              // 이 새신자를 전도한 사람 찾기
+              const referral = referralsData?.find(r => r.new_member_id === m.id);
+              let referrerName = undefined;
+
+              if (referral) {
+                // 전도자 정보 찾기 (membersData 또는 usersData에서)
+                const referrerMember = membersData?.find(member => member.id === referral.referrer_id);
+                const referrerUser = usersData?.find(user => user.id === referral.referrer_id);
+                referrerName = referrerMember?.name || referrerUser?.name;
+              }
+
+              return {
+                id: m.id,
+                name: m.name,
+                phone: (m as any).phone || '',
+                referrer_name: referrerName
+              };
+            }) || []
+        );
 
         // 재적 결석자 명단
         const absentRecords = attendanceData?.filter(r => !r.present) || [];
 
-        const absenteesWithId = membersData
-          ?.filter(m => !m.is_newbie && absentRecords.some(r => r.member_id === m.id))
-          .map(m => {
-            const record = absentRecords.find(r => r.member_id === m.id);
-            return {
-              id: m.id,
-              name: m.name,
-              phone: (m as any).phone || '',
-              absence_reason: (record as any)?.absence_reason || undefined
-            };
-          }) || [];
+        const absenteesWithId = uniqueById(
+          membersData
+            ?.filter(m => !m.is_newbie && absentRecords.some(r => r.member_id === m.id))
+            .map(m => {
+              const record = absentRecords.find(r => r.member_id === m.id);
+              return {
+                id: m.id,
+                name: m.name,
+                phone: (m as any).phone || '',
+                absence_reason: (record as any)?.absence_reason || undefined
+              };
+            }) || []
+        );
 
         // 재적 결석 수 계산
         const regularAbsent = attendanceData?.filter(r => {
@@ -470,6 +541,7 @@ export default function Reports() {
   const isPastor = user?.role === 'pastor';
   // 현재 보고 있는 뷰 확인
   const viewAll = searchParams.get('view') === 'all';
+  const teamColorParam = searchParams.get('team_color');
   const currentTeamId = searchParams.get('team_id');
 
   return (
@@ -488,7 +560,7 @@ export default function Reports() {
             onClick={() => setSidebarOpen(true)}
             className="p-1.5 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
           >
-            <i className="ri-menu-line text-xl text-gray-700"></i>
+            <i className="ri-menu-line text-2xl text-gray-700"></i>
           </button>
         </div>
       </nav>
@@ -509,35 +581,73 @@ export default function Reports() {
       >
         <div className="p-6">
           <div className="flex justify-between items-center mb-8">
-            <h2 className="text-lg font-bold text-gray-900">메뉴</h2>
+            <h2 className="text-xl font-bold text-gray-900">메뉴</h2>
             <button
               onClick={() => setSidebarOpen(false)}
               className="p-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
             >
-              <i className="ri-close-line text-2xl text-gray-900"></i>
+              <i className="ri-close-line text-3xl text-gray-900"></i>
             </button>
           </div>
 
           <div className="space-y-2">
             {isPastor ? (
               <>
-                {/* 목사님 메뉴: 전체 + 팀 목록 */}
+                {/* 목사님 메뉴: 전체 + 청팀 + 백팀 + 팀 목록 */}
                 <button
                   onClick={() => {
                     navigate('/reports?view=all');
                     setSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors ${
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors ${
                     viewAll
                       ? 'text-white'
                       : 'hover:bg-gray-50 text-gray-700'
                   }`}
                   style={viewAll ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
                 >
-                  <i className={`ri-dashboard-line text-xl ${viewAll ? 'text-white' : 'text-gray-600'}`}></i>
+                  <i className={`ri-dashboard-line text-2xl ${viewAll ? 'text-white' : 'text-gray-600'}`}></i>
                   <span className={viewAll ? 'text-white' : 'text-gray-900'}>전체</span>
                 </button>
 
+                {/* 청팀 버튼 */}
+                <button
+                  onClick={() => {
+                    navigate('/reports?team_color=청팀');
+                    setSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors ${
+                    teamColorParam === '청팀'
+                      ? 'text-white'
+                      : 'hover:bg-gray-50 text-gray-700'
+                  }`}
+                  style={teamColorParam === '청팀' ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
+                >
+                  <i className={`ri-team-line text-2xl ${teamColorParam === '청팀' ? 'text-white' : 'text-blue-600'}`}></i>
+                  <span className={teamColorParam === '청팀' ? 'text-white' : 'text-gray-900'}>청팀</span>
+                </button>
+
+                {/* 백팀 버튼 */}
+                <button
+                  onClick={() => {
+                    navigate('/reports?team_color=백팀');
+                    setSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors ${
+                    teamColorParam === '백팀'
+                      ? 'text-white'
+                      : 'hover:bg-gray-50 text-gray-700'
+                  }`}
+                  style={teamColorParam === '백팀' ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
+                >
+                  <i className={`ri-team-line text-2xl ${teamColorParam === '백팀' ? 'text-white' : 'text-gray-600'}`}></i>
+                  <span className={teamColorParam === '백팀' ? 'text-white' : 'text-gray-900'}>백팀</span>
+                </button>
+
+                {/* 구분선 */}
+                <div className="border-t border-gray-200 my-2"></div>
+
+                {/* 개별 팀 목록 */}
                 {teams.map((team) => (
                   <button
                     key={team.id}
@@ -545,14 +655,14 @@ export default function Reports() {
                       navigate(`/reports?team_id=${team.id}`);
                       setSidebarOpen(false);
                     }}
-                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-medium cursor-pointer whitespace-nowrap transition-colors ${
+                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors ${
                       currentTeamId === team.id
                         ? 'text-white'
                         : 'hover:bg-gray-50 text-gray-700'
                     }`}
                     style={currentTeamId === team.id ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
                   >
-                    <i className={`ri-team-line text-xl ${currentTeamId === team.id ? 'text-white' : 'text-gray-600'}`}></i>
+                    <i className={`ri-team-line text-2xl ${currentTeamId === team.id ? 'text-white' : 'text-gray-600'}`}></i>
                     <span className={currentTeamId === team.id ? 'text-white' : 'text-gray-900'}>{team.name}</span>
                   </button>
                 ))}
@@ -565,9 +675,9 @@ export default function Reports() {
                     navigate('/attendance');
                     setSidebarOpen(false);
                   }}
-                  className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-medium cursor-pointer whitespace-nowrap transition-colors"
+                  className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors"
                 >
-                  <i className="ri-checkbox-circle-line text-xl text-gray-600"></i>
+                  <i className="ri-checkbox-circle-line text-2xl text-gray-600"></i>
                   <span className="text-gray-900">출석 체크</span>
                 </button>
                 <button
@@ -575,10 +685,10 @@ export default function Reports() {
                     navigate('/reports');
                     setSidebarOpen(false);
                   }}
-                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors"
+                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors"
                   style={{ backgroundColor: '#1E88E5', color: 'white' }}
                 >
-                  <i className="ri-bar-chart-line text-xl" style={{ color: 'white' }}></i>
+                  <i className="ri-bar-chart-line text-2xl" style={{ color: 'white' }}></i>
                   <span style={{ color: 'white' }}>출석 & 전도</span>
                 </button>
               </>
@@ -592,9 +702,9 @@ export default function Reports() {
                 localStorage.removeItem('user');
                 navigate(isPastor ? '/pastor-login' : '/login');
               }}
-              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-medium cursor-pointer transition-colors"
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-semibold cursor-pointer transition-colors"
             >
-              <i className="ri-logout-box-line text-xl"></i>
+              <i className="ri-logout-box-line text-2xl"></i>
               <span>로그아웃</span>
             </button>
           </div>
@@ -611,10 +721,10 @@ export default function Reports() {
               onClick={goToPrevious}
               className="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center transition-colors cursor-pointer"
             >
-              <i className="ri-arrow-left-s-line text-2xl text-gray-700"></i>
+              <i className="ri-arrow-left-s-line text-3xl text-gray-700"></i>
             </button>
             <div className="text-center">
-              <p className="text-lg font-bold text-gray-900">
+              <p className="text-xl font-bold text-gray-900">
                 {formatDisplayDate(selectedDate)}
               </p>
             </div>
@@ -622,7 +732,7 @@ export default function Reports() {
               onClick={goToNext}
               className="w-9 h-9 rounded-full hover:bg-white flex items-center justify-center transition-colors cursor-pointer"
             >
-              <i className="ri-arrow-right-s-line text-2xl text-gray-700"></i>
+              <i className="ri-arrow-right-s-line text-3xl text-gray-700"></i>
             </button>
           </div>
         </div>
@@ -631,7 +741,7 @@ export default function Reports() {
           <div className="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
             <div className="flex flex-col items-center space-y-3">
               <i className="ri-loader-4-line text-5xl animate-spin" style={{ color: '#1E88E5' }}></i>
-              <span className="text-lg font-medium text-gray-900">로딩 중...</span>
+              <span className="text-xl font-semibold text-gray-900">로딩 중...</span>
             </div>
           </div>
         )}
@@ -644,7 +754,7 @@ export default function Reports() {
                 setPeriod('week');
                 setSelectedDate(getThisSunday());
               }}
-              className={`py-2 px-4 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+              className={`py-2 px-4 rounded-lg text-base font-bold transition-all cursor-pointer ${
                 period === 'week'
                   ? ''
                   : 'text-gray-600 hover:bg-gray-50'
@@ -658,7 +768,7 @@ export default function Reports() {
                 setPeriod('month');
                 setSelectedDate(new Date());
               }}
-              className={`py-2 px-4 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+              className={`py-2 px-4 rounded-lg text-base font-bold transition-all cursor-pointer ${
                 period === 'month'
                   ? ''
                   : 'text-gray-600 hover:bg-gray-50'
@@ -672,7 +782,7 @@ export default function Reports() {
                 setPeriod('year');
                 setSelectedDate(new Date());
               }}
-              className={`py-2 px-4 rounded-lg text-sm font-semibold transition-all cursor-pointer ${
+              className={`py-2 px-4 rounded-lg text-base font-bold transition-all cursor-pointer ${
                 period === 'year'
                   ? ''
                   : 'text-gray-600 hover:bg-gray-50'
@@ -690,18 +800,18 @@ export default function Reports() {
             {/* 총 출석 헤더 */}
             <div className="mb-8 pb-8 border-b border-gray-100">
               <div className="flex items-baseline space-x-3">
-                <h1 className="text-sm font-semibold text-gray-500 uppercase tracking-wide">{teamName} 총출석</h1>
+                <h1 className="text-base font-bold text-gray-500 uppercase tracking-wide">{teamName} 총출석</h1>
               </div>
               <div className="mt-2 flex items-baseline space-x-2">
                 <span className="text-4xl font-bold text-gray-900" style={{ letterSpacing: '-0.03em' }}>
                   {reportData.weeklyAttendance.totalAttendance || 0}
                 </span>
-                <span className="text-xl font-medium text-gray-400">명</span>
+                <span className="text-2xl font-semibold text-gray-400">명</span>
               </div>
             </div>
 
             {/* 출석 현황 */}
-            <h2 className="text-sm font-semibold text-gray-700 mb-8">{teamName} 출석 현황</h2>
+            <h2 className="text-base font-bold text-gray-700 mb-8">{teamName} 출석 현황</h2>
             <div className="space-y-6">
               {/* 재적 출석 */}
               <div
@@ -716,15 +826,15 @@ export default function Reports() {
               >
                 <div className="flex items-center space-x-4">
                   <div className="w-10 h-10 rounded-2xl bg-blue-50/50 flex items-center justify-center">
-                    <i className="ri-user-line text-lg" style={{ color: '#1E88E5' }}></i>
+                    <i className="ri-user-line text-xl" style={{ color: '#1E88E5' }}></i>
                   </div>
-                  <span className="text-base font-medium text-gray-700">재적 출석</span>
+                  <span className="text-lg font-semibold text-gray-700">재적 출석</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span className="text-2xl font-bold text-gray-900">
+                  <span className="text-3xl font-bold text-gray-900">
                     {reportData.weeklyAttendance.regularAttendance || 0}
                   </span>
-                  <i className="ri-arrow-right-s-line text-xl text-gray-400"></i>
+                  <i className="ri-arrow-right-s-line text-2xl text-gray-400"></i>
                 </div>
               </div>
 
@@ -741,15 +851,15 @@ export default function Reports() {
               >
                 <div className="flex items-center space-x-4">
                   <div className="w-10 h-10 rounded-2xl bg-green-50/50 flex items-center justify-center">
-                    <i className="ri-user-add-line text-lg text-green-600"></i>
+                    <i className="ri-user-add-line text-xl text-green-600"></i>
                   </div>
-                  <span className="text-base font-medium text-gray-700">새신자 출석</span>
+                  <span className="text-lg font-semibold text-gray-700">새신자 출석</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span className="text-2xl font-bold text-gray-900">
+                  <span className="text-3xl font-bold text-gray-900">
                     {reportData.weeklyAttendance.newbieAttendance || 0}
                   </span>
-                  <i className="ri-arrow-right-s-line text-xl text-gray-400"></i>
+                  <i className="ri-arrow-right-s-line text-2xl text-gray-400"></i>
                 </div>
               </div>
 
@@ -766,15 +876,15 @@ export default function Reports() {
               >
                 <div className="flex items-center space-x-4">
                   <div className="w-10 h-10 rounded-2xl bg-gray-100/80 flex items-center justify-center">
-                    <i className="ri-user-unfollow-line text-lg text-gray-500"></i>
+                    <i className="ri-user-unfollow-line text-xl text-gray-500"></i>
                   </div>
-                  <span className="text-base font-medium text-gray-700">재적 결석</span>
+                  <span className="text-lg font-semibold text-gray-700">재적 결석</span>
                 </div>
                 <div className="flex items-center space-x-2">
-                  <span className="text-2xl font-bold text-gray-900">
+                  <span className="text-3xl font-bold text-gray-900">
                     {reportData.weeklyAttendance.regularAbsent || 0}
                   </span>
-                  <i className="ri-arrow-right-s-line text-xl text-gray-400"></i>
+                  <i className="ri-arrow-right-s-line text-2xl text-gray-400"></i>
                 </div>
               </div>
             </div>
@@ -815,17 +925,17 @@ export default function Reports() {
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="text-center">
                     <p className="text-3xl font-bold" style={{ color: '#1E88E5' }}>{totalPoints}</p>
-                    <p className="text-xs text-gray-600 font-medium">명</p>
+                    <p className="text-sm text-gray-600 font-semibold">명</p>
                   </div>
                 </div>
               </div>
-              <h3 className="text-lg font-bold text-gray-900">{formatTitleDate(selectedDate)} 총 전도인원 ({teamName})</h3>
+              <h3 className="text-xl font-bold text-gray-900">{formatTitleDate(selectedDate)} 총 전도인원 ({teamName})</h3>
             </div>
 
             {/* 개인별 전도 인원 리스트 */}
             {reportData?.per_user_points && reportData.per_user_points.length > 0 && (
               <div>
-                <h3 className="text-sm font-semibold text-gray-700 mb-6">{teamName} 개인별 전도인원</h3>
+                <h3 className="text-base font-bold text-gray-700 mb-6">{teamName} 개인별 전도인원</h3>
                 <div className="space-y-3">
                   {reportData.per_user_points.slice(0, 10).map((user, index) => (
                     <div
@@ -839,10 +949,10 @@ export default function Reports() {
                         setShowReferralModal(true);
                       }}
                     >
-                      <span className="text-base font-semibold text-gray-900">{user.name}</span>
+                      <span className="text-lg font-bold text-gray-900">{user.name}</span>
                       <div className="flex items-center space-x-2">
-                        <span className="text-sm font-mono text-gray-500">{user.points}명</span>
-                        <i className="ri-arrow-right-s-line text-lg text-gray-400"></i>
+                        <span className="text-base font-mono text-gray-500">{user.points}명</span>
+                        <i className="ri-arrow-right-s-line text-xl text-gray-400"></i>
                       </div>
                     </div>
                   ))}
@@ -860,16 +970,16 @@ export default function Reports() {
               <div className="p-6 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-xl font-bold text-gray-900">
+                    <h3 className="text-2xl font-bold text-gray-900">
                       {selectedReferrer.name} {formatTitleDate(selectedDate)} 전도 횟수
                     </h3>
-                    <p className="text-sm text-gray-600 mt-1">총 {selectedReferrer.members?.length || 0}명</p>
+                    <p className="text-base text-gray-600 mt-1">총 {selectedReferrer.members?.length || 0}명</p>
                   </div>
                   <button
                     onClick={() => setShowReferralModal(false)}
                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                   >
-                    <i className="ri-close-line text-2xl text-gray-700"></i>
+                    <i className="ri-close-line text-3xl text-gray-700"></i>
                   </button>
                 </div>
               </div>
@@ -884,21 +994,21 @@ export default function Reports() {
                         className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg"
                       >
                         <div className="flex items-center space-x-3">
-                          <span className="text-sm font-semibold text-gray-600 w-6">
+                          <span className="text-base font-bold text-gray-600 w-6">
                             {index + 1}
                           </span>
-                          <span className="text-sm font-semibold text-gray-900">
+                          <span className="text-base font-bold text-gray-900">
                             {member.name}
                           </span>
                         </div>
-                        <span className="text-xs text-gray-600">
+                        <span className="text-sm text-gray-600">
                           {member.date}
                         </span>
                       </div>
                     ))
                   ) : (
                     <div className="py-8 text-center">
-                      <p className="text-sm text-gray-500">전도 명단이 없습니다</p>
+                      <p className="text-base text-gray-500">전도 명단이 없습니다</p>
                     </div>
                   )}
                 </div>
@@ -908,7 +1018,7 @@ export default function Reports() {
               <div className="p-6 border-t border-gray-200">
                 <button
                   onClick={() => setShowReferralModal(false)}
-                  className="w-full py-3 rounded-lg font-semibold text-white transition-colors cursor-pointer"
+                  className="w-full py-3 rounded-lg font-bold text-white transition-colors cursor-pointer"
                   style={{ backgroundColor: '#1E88E5' }}
                 >
                   닫기
@@ -926,14 +1036,14 @@ export default function Reports() {
               <div className="p-6 border-b border-gray-200">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h3 className="text-xl font-bold text-gray-900">{listModalData.title}</h3>
-                    <p className="text-sm text-gray-600 mt-1">총 {listModalData.members?.length || 0}명</p>
+                    <h3 className="text-2xl font-bold text-gray-900">{listModalData.title}</h3>
+                    <p className="text-base text-gray-600 mt-1">총 {listModalData.members?.length || 0}명</p>
                   </div>
                   <button
                     onClick={() => setShowListModal(false)}
                     className="p-2 hover:bg-gray-100 rounded-lg transition-colors cursor-pointer"
                   >
-                    <i className="ri-close-line text-2xl text-gray-700"></i>
+                    <i className="ri-close-line text-3xl text-gray-700"></i>
                   </button>
                 </div>
               </div>
@@ -948,21 +1058,28 @@ export default function Reports() {
                         className="flex items-center justify-between py-3 px-4 bg-gray-50 rounded-lg"
                       >
                         <div className="flex items-center space-x-3">
-                          <span className="text-sm font-semibold text-gray-600 w-6">
+                          <span className="text-base font-bold text-gray-600 w-6">
                             {index + 1}
                           </span>
-                          <span className="text-sm font-semibold text-gray-900">
+                          <span className="text-base font-bold text-gray-900">
                             {member.name}
                           </span>
                         </div>
-                        <span className="text-xs text-gray-600">
-                          {member.absence_reason || '개인사정'}
-                        </span>
+                        {listModalData.title.includes('결석') && (
+                          <span className="text-sm text-gray-600">
+                            {member.absence_reason || '개인사정'}
+                          </span>
+                        )}
+                        {listModalData.title.includes('새신자') && member.referrer_name && (
+                          <span className="text-sm text-gray-600">
+                            전도자: {member.referrer_name}
+                          </span>
+                        )}
                       </div>
                     ))
                   ) : (
                     <div className="py-8 text-center">
-                      <p className="text-sm text-gray-500">명단이 없습니다</p>
+                      <p className="text-base text-gray-500">명단이 없습니다</p>
                     </div>
                   )}
                 </div>
@@ -972,7 +1089,7 @@ export default function Reports() {
               <div className="p-6 border-t border-gray-200">
                 <button
                   onClick={() => setShowListModal(false)}
-                  className="w-full py-3 rounded-lg font-semibold text-white transition-colors cursor-pointer"
+                  className="w-full py-3 rounded-lg font-bold text-white transition-colors cursor-pointer"
                   style={{ backgroundColor: '#1E88E5' }}
                 >
                   닫기

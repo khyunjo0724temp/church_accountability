@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 
@@ -9,6 +9,23 @@ export default function PastorLogin() {
     password: ''
   });
   const [error, setError] = useState('');
+
+  // 자동 로그인 체크
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        // 목사님이면 리포트 페이지로
+        if (user.role === 'pastor') {
+          navigate('/reports?view=all');
+        }
+      } catch (err) {
+        // localStorage 데이터가 잘못된 경우 제거
+        localStorage.removeItem('user');
+      }
+    }
+  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,22 +69,22 @@ export default function PastorLogin() {
             </div>
           </div>
 
-          <h1 className="text-2xl font-bold text-center text-white mb-2">
+          <h1 className="text-3xl font-bold text-center text-white mb-2">
             관리자 로그인
           </h1>
-          <p className="text-center text-blue-200 text-sm mb-8">
+          <p className="text-center text-blue-200 text-base font-medium mb-8">
             Pastor Dashboard Access
           </p>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-sm">
+            <div className="mb-4 p-3 bg-red-500/20 border border-red-500/50 rounded-lg text-red-200 text-base font-semibold">
               {error}
             </div>
           )}
 
           <form onSubmit={handleSubmit} className="space-y-4">
             <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">
+              <label className="block text-base font-semibold text-blue-200 mb-2">
                 Username
               </label>
               <input
@@ -75,13 +92,13 @@ export default function PastorLogin() {
                 required
                 value={formData.username}
                 onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white text-base placeholder-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter username"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-blue-200 mb-2">
+              <label className="block text-base font-semibold text-blue-200 mb-2">
                 Password
               </label>
               <input
@@ -89,14 +106,14 @@ export default function PastorLogin() {
                 required
                 value={formData.password}
                 onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white placeholder-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                className="w-full px-4 py-3 bg-white/10 border border-white/20 rounded-lg text-white text-base placeholder-blue-300 focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                 placeholder="Enter password"
               />
             </div>
 
             <button
               type="submit"
-              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-medium py-3 rounded-lg transition-all transform hover:scale-105 cursor-pointer"
+              className="w-full bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-lg py-3 rounded-lg transition-all transform hover:scale-105 cursor-pointer"
             >
               관리자 대시보드 접속
             </button>
@@ -105,7 +122,7 @@ export default function PastorLogin() {
           <div className="mt-6 text-center">
             <button
               onClick={() => navigate('/login')}
-              className="text-blue-300 hover:text-white text-sm transition-colors cursor-pointer"
+              className="text-blue-300 hover:text-white text-base font-semibold transition-colors cursor-pointer"
             >
               일반 로그인으로 돌아가기
             </button>

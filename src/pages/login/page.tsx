@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
 
@@ -10,10 +10,28 @@ export default function Login() {
     phone: '',
     pin: '',
     teamName: '',
+    teamColor: '청팀',
     rememberDevice: false
   });
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+
+  // 자동 로그인 체크
+  useEffect(() => {
+    const userData = localStorage.getItem('user');
+    if (userData) {
+      try {
+        const user = JSON.parse(userData);
+        // 팀장이면 출석 체크 페이지로
+        if (user.role === 'team-leader') {
+          navigate('/attendance');
+        }
+      } catch (err) {
+        // localStorage 데이터가 잘못된 경우 제거
+        localStorage.removeItem('user');
+      }
+    }
+  }, [navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -87,7 +105,10 @@ export default function Login() {
           } else {
             const { data: newTeam, error: teamError } = await supabase
               .from('teams')
-              .insert({ name: formData.teamName })
+              .insert({
+                name: formData.teamName,
+                team_color: formData.teamColor
+              })
               .select()
               .single();
 
@@ -136,21 +157,21 @@ export default function Login() {
             />
           </div>
 
-          <h1 className="text-2xl font-bold text-center text-gray-800 mb-2">
+          <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">
             {isLogin ? '로그인' : '회원가입'}
           </h1>
-          <p className="text-center text-gray-600 text-sm mb-8">
+          <p className="text-center text-gray-600 text-base font-medium mb-8">
             {isLogin ? '출석 관리 시스템에 오신 것을 환영합니다' : '팀장으로 등록하시겠습니까?'}
           </p>
 
           {error && (
-            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+            <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-base font-semibold">
               {error}
             </div>
           )}
 
           {success && (
-            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm">
+            <div className="mb-4 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-base font-semibold">
               {success}
             </div>
           )}
@@ -158,7 +179,7 @@ export default function Login() {
           <form onSubmit={handleSubmit} className="space-y-5">
             {!isLogin && (
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-base font-semibold text-gray-700 mb-2">
                   이름
                 </label>
                 <input
@@ -166,14 +187,14 @@ export default function Login() {
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-base"
                   placeholder="이름을 입력하세요"
                 />
               </div>
             )}
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-base font-semibold text-gray-700 mb-2">
                 전화번호
               </label>
               <input
@@ -181,13 +202,13 @@ export default function Login() {
                 required
                 value={formData.phone}
                 onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/[^0-9]/g, '') })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-base"
                 placeholder="01012345678"
               />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
+              <label className="block text-base font-semibold text-gray-700 mb-2">
                 4자리 PIN
               </label>
               <input
@@ -196,24 +217,55 @@ export default function Login() {
                 maxLength={4}
                 value={formData.pin}
                 onChange={(e) => setFormData({ ...formData, pin: e.target.value })}
-                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-base"
                 placeholder="4자리 숫자"
               />
             </div>
 
             {!isLogin && (
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  팀명 (선택)
-                </label>
-                <input
-                  type="text"
-                  value={formData.teamName}
-                  onChange={(e) => setFormData({ ...formData, teamName: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm"
-                  placeholder="예: 백남여 4C"
-                />
-              </div>
+              <>
+                <div>
+                  <label className="block text-base font-semibold text-gray-700 mb-2">
+                    팀 색상 <span className="text-red-500">*</span>
+                  </label>
+                  <div className="flex space-x-4">
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="teamColor"
+                        value="청팀"
+                        checked={formData.teamColor === '청팀'}
+                        onChange={(e) => setFormData({ ...formData, teamColor: e.target.value })}
+                        className="w-5 h-5 text-blue-600 border-gray-300 focus:ring-blue-500 cursor-pointer"
+                      />
+                      <span className="ml-2 text-base font-semibold text-gray-700">청팀</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="teamColor"
+                        value="백팀"
+                        checked={formData.teamColor === '백팀'}
+                        onChange={(e) => setFormData({ ...formData, teamColor: e.target.value })}
+                        className="w-5 h-5 text-gray-600 border-gray-300 focus:ring-gray-500 cursor-pointer"
+                      />
+                      <span className="ml-2 text-base font-semibold text-gray-700">백팀</span>
+                    </label>
+                  </div>
+                </div>
+                <div>
+                  <label className="block text-base font-semibold text-gray-700 mb-2">
+                    팀명 (선택)
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.teamName}
+                    onChange={(e) => setFormData({ ...formData, teamName: e.target.value })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-base"
+                    placeholder="예: 백남여 4C"
+                  />
+                </div>
+              </>
             )}
 
             {isLogin && (
@@ -223,9 +275,9 @@ export default function Login() {
                   id="remember"
                   checked={formData.rememberDevice}
                   onChange={(e) => setFormData({ ...formData, rememberDevice: e.target.checked })}
-                  className="w-4 h-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 cursor-pointer"
+                  className="w-5 h-5 text-primary-600 border-gray-300 rounded focus:ring-primary-500 cursor-pointer"
                 />
-                <label htmlFor="remember" className="ml-2 text-sm text-gray-700 cursor-pointer">
+                <label htmlFor="remember" className="ml-2 text-base font-medium text-gray-700 cursor-pointer">
                   이 기기 기억하기
                 </label>
               </div>
@@ -233,7 +285,7 @@ export default function Login() {
 
             <button
               type="submit"
-              className="w-full text-white font-medium py-3 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
+              className="w-full text-white font-bold text-lg py-3 rounded-lg transition-colors whitespace-nowrap cursor-pointer"
               style={{ backgroundColor: '#1E88E5' }}
               onMouseEnter={(e) => e.currentTarget.style.backgroundColor = '#1976D2'}
               onMouseLeave={(e) => e.currentTarget.style.backgroundColor = '#1E88E5'}
@@ -249,14 +301,14 @@ export default function Login() {
                 setError('');
                 setSuccess('');
               }}
-              className="text-sm text-primary-500 hover:text-primary-600 cursor-pointer whitespace-nowrap"
+              className="text-base font-semibold text-primary-500 hover:text-primary-600 cursor-pointer whitespace-nowrap"
             >
               {isLogin ? '계정이 없으신가요? 회원가입' : '이미 계정이 있으신가요? 로그인'}
             </button>
           </div>
         </div>
 
-        <p className="text-center text-gray-500 text-xs mt-6">
+        <p className="text-center text-gray-500 text-sm font-medium mt-6">
           문의사항이 있으시면 관리자에게 연락해주세요
         </p>
       </div>

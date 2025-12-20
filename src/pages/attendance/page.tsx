@@ -38,6 +38,8 @@ export default function Attendance() {
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [teamName, setTeamName] = useState('');
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [memberToDelete, setMemberToDelete] = useState<string | null>(null);
 
   useEffect(() => {
     fetchMembers();
@@ -311,6 +313,21 @@ export default function Attendance() {
       return;
     }
 
+    // 이름 중복 검증
+    const duplicateName = members.find(m => {
+      // 수정할 때는 자기 자신은 제외
+      if (editingMember && m.id === editingMember.id) {
+        return false;
+      }
+      // 같은 이름이 있는지 확인
+      return m.name === formData.name;
+    });
+
+    if (duplicateName) {
+      alert(`같은 이름 "${formData.name}"이(가) 이미 존재합니다.\n다른 이름을 사용하거나 구별할 수 있는 표시를 추가해주세요.\n예: ${formData.name}A, ${formData.name}B`);
+      return;
+    }
+
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -435,20 +452,41 @@ export default function Attendance() {
     }
   };
 
-  const handleDelete = async (id: string) => {
-    if (!confirm('정말 삭제하시겠습니까?')) return;
+  const handleDeleteClick = (id: string) => {
+    // 삭제하려는 멤버가 구역장인지 확인
+    const memberToCheck = members.find(m => m.id === id);
+
+    if (memberToCheck?.is_zone_leader) {
+      // 이 구역장에게 소속된 멤버가 있는지 확인
+      const hasMembers = members.some(m => m.zone_leader_id === id);
+
+      if (hasMembers) {
+        alert('이 구역장에게 소속된 멤버가 있어 삭제할 수 없습니다.\n먼저 소속 멤버들을 다른 구역으로 이동하거나 삭제해주세요.');
+        return;
+      }
+    }
+
+    // 삭제 확인 모달 표시
+    setMemberToDelete(id);
+    setShowDeleteConfirm(true);
+  };
+
+  const handleDelete = async () => {
+    if (!memberToDelete) return;
 
     try {
       const { error } = await supabase
         .from('members')
         .delete()
-        .eq('id', id);
+        .eq('id', memberToDelete);
 
       if (error) {
         console.error('삭제 실패:', error);
         return;
       }
 
+      setShowDeleteConfirm(false);
+      setMemberToDelete(null);
       fetchMembers();
       closeModal();
     } catch (error) {
@@ -614,7 +652,7 @@ export default function Attendance() {
       >
         <div className="p-6">
           <div className="flex justify-between items-center mb-8">
-            <h2 className="text-lg font-bold text-gray-900">메뉴</h2>
+            <h2 className="text-xl font-bold text-gray-900">메뉴</h2>
             <button
               onClick={() => setSidebarOpen(false)}
               className="p-2 hover:bg-gray-50 rounded-lg transition-colors cursor-pointer"
@@ -629,7 +667,7 @@ export default function Attendance() {
                 navigate('/attendance');
                 setSidebarOpen(false);
               }}
-              className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors"
+              className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors"
               style={{ backgroundColor: '#1E88E5', color: 'white' }}
             >
               <i className="ri-checkbox-circle-line text-xl" style={{ color: 'white' }}></i>
@@ -640,7 +678,7 @@ export default function Attendance() {
                 navigate('/reports');
                 setSidebarOpen(false);
               }}
-              className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-medium cursor-pointer whitespace-nowrap transition-colors"
+              className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors"
             >
               <i className="ri-bar-chart-line text-xl text-gray-600"></i>
               <span className="text-gray-900">출석 & 전도</span>
@@ -663,7 +701,7 @@ export default function Attendance() {
               <i className="ri-arrow-left-s-line text-2xl text-gray-700"></i>
             </button>
             <div className="text-center">
-              <p className="text-lg font-bold text-gray-900">
+              <p className="text-xl font-bold text-gray-900">
                 {formatDisplayDate(selectedDate)}
               </p>
             </div>
@@ -681,7 +719,7 @@ export default function Attendance() {
           <div className="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
             <div className="flex flex-col items-center space-y-3">
               <i className="ri-loader-4-line text-5xl animate-spin" style={{ color: '#1E88E5' }}></i>
-              <span className="text-lg font-medium text-gray-900">로딩 중...</span>
+              <span className="text-xl font-semibold text-gray-900">로딩 중...</span>
             </div>
           </div>
         )}
@@ -693,10 +731,10 @@ export default function Attendance() {
                 <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: '#4CAF50' }}>
                   <i className="ri-check-line text-4xl text-white"></i>
                 </div>
-                <p className="text-lg font-bold text-gray-900 text-center">{successMessage}</p>
+                <p className="text-xl font-bold text-gray-900 text-center">{successMessage}</p>
                 <button
                   onClick={() => setSuccessMessage('')}
-                  className="w-full py-3 rounded-lg font-semibold text-white transition-colors cursor-pointer"
+                  className="w-full py-3 rounded-lg font-bold text-white transition-colors cursor-pointer"
                   style={{ backgroundColor: '#1E88E5' }}
                 >
                   확인
@@ -706,13 +744,46 @@ export default function Attendance() {
           </div>
         )}
 
+        {/* 삭제 확인 모달 */}
+        {showDeleteConfirm && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
+            <div className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full mx-4">
+              <div className="flex flex-col items-center space-y-4">
+                <div className="w-16 h-16 rounded-full flex items-center justify-center" style={{ backgroundColor: '#EF5350' }}>
+                  <i className="ri-delete-bin-line text-4xl text-white"></i>
+                </div>
+                <p className="text-xl font-bold text-gray-900 text-center">정말로 삭제하시겠습니까?</p>
+                <p className="text-base font-medium text-gray-600 text-center">삭제된 멤버는 복구할 수 없습니다.</p>
+                <div className="flex space-x-3 w-full">
+                  <button
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setMemberToDelete(null);
+                    }}
+                    className="flex-1 py-3 rounded-lg font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"
+                  >
+                    취소
+                  </button>
+                  <button
+                    onClick={handleDelete}
+                    className="flex-1 py-3 rounded-lg font-bold text-white transition-colors cursor-pointer"
+                    style={{ backgroundColor: '#EF5350' }}
+                  >
+                    삭제
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* 멤버 출석 체크 카드 */}
         <div className="bg-white rounded-2xl p-5 mb-4 shadow-sm">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-base font-bold text-gray-900">{teamName} 출석 체크</h3>
+            <h3 className="text-lg font-bold text-gray-900">{teamName} 출석 체크</h3>
             <button
               onClick={openAddModal}
-              className="flex items-center space-x-1.5 text-primary-600 hover:text-primary-700 font-semibold py-2 px-3 rounded-lg hover:bg-primary-50 transition-colors cursor-pointer whitespace-nowrap text-sm"
+              className="flex items-center space-x-1.5 text-primary-600 hover:text-primary-700 font-bold py-2 px-3 rounded-lg hover:bg-primary-50 transition-colors cursor-pointer whitespace-nowrap text-base"
             >
               <i className="ri-user-add-line text-lg"></i>
               <span>추가</span>
@@ -731,7 +802,7 @@ export default function Attendance() {
                 {newbieMembers.length > 0 && (
                   <button
                     onClick={() => setActiveTab('newbies')}
-                    className="px-5 py-2.5 whitespace-nowrap transition-all cursor-pointer text-sm font-medium"
+                    className="px-5 py-2.5 whitespace-nowrap transition-all cursor-pointer text-base font-semibold"
                     style={{
                       backgroundColor: activeTab === 'newbies' ? '#2D2D2D' : 'white',
                       color: activeTab === 'newbies' ? 'white' : '#000000',
@@ -745,7 +816,7 @@ export default function Attendance() {
                 {teamLeaderMembers.length > 0 && (
                   <button
                     onClick={() => setActiveTab('teamleader')}
-                    className="px-5 py-2.5 whitespace-nowrap transition-all cursor-pointer text-sm font-medium"
+                    className="px-5 py-2.5 whitespace-nowrap transition-all cursor-pointer text-base font-semibold"
                     style={{
                       backgroundColor: activeTab === 'teamleader' ? '#2D2D2D' : 'white',
                       color: activeTab === 'teamleader' ? 'white' : '#000000',
@@ -763,7 +834,7 @@ export default function Attendance() {
                     <button
                       key={leaderId}
                       onClick={() => setActiveTab(leaderId)}
-                      className="px-5 py-2.5 whitespace-nowrap transition-all cursor-pointer text-sm font-medium"
+                      className="px-5 py-2.5 whitespace-nowrap transition-all cursor-pointer text-base font-semibold"
                       style={{
                         backgroundColor: activeTab === leaderId ? '#2D2D2D' : 'white',
                         color: activeTab === leaderId ? 'white' : '#000000',
@@ -778,11 +849,11 @@ export default function Attendance() {
               </div>
 
               {/* 선택된 탭의 멤버 목록 */}
-              <div className="space-y-2">
+              <div className="space-y-4">
                 {activeTab === 'newbies' && newbieMembers.map((member) => (
                   <div
                     key={member.id}
-                    className="flex items-center justify-between p-3 border border-gray-200 hover:border-gray-300 rounded-xl transition-all bg-white"
+                    className="flex items-center justify-between p-4 border border-gray-200 hover:border-gray-300 rounded-xl transition-all bg-white"
                   >
                     <div
                       className="flex items-center space-x-4 flex-1 cursor-pointer"
@@ -804,7 +875,7 @@ export default function Attendance() {
                         ></i>
                       </div>
                       <div className="flex-1">
-                        <p className="font-medium text-gray-800">{member.name}</p>
+                        <p className="font-semibold text-gray-800">{member.name}</p>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -835,7 +906,7 @@ export default function Attendance() {
                                 });
                               }
                             }}
-                            className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl cursor-pointer appearance-none transition-colors"
+                            className="px-3 py-2 text-base font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl cursor-pointer appearance-none transition-colors"
                             style={{
                               minWidth: '100px',
                               backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
@@ -870,7 +941,7 @@ export default function Attendance() {
                 {activeTab === 'teamleader' && teamLeaderMembers.map((member) => (
                   <div
                     key={member.id}
-                    className="flex items-center justify-between p-3 border border-gray-200 hover:border-gray-300 rounded-xl transition-all bg-white"
+                    className="flex items-center justify-between p-4 border border-gray-200 hover:border-gray-300 rounded-xl transition-all bg-white"
                   >
                     <div
                       className="flex items-center space-x-4 flex-1 cursor-pointer"
@@ -892,9 +963,9 @@ export default function Attendance() {
                         ></i>
                       </div>
                       <div>
-                        <p className="font-medium text-gray-800">{member.name}</p>
+                        <p className="font-semibold text-gray-800">{member.name}</p>
                         {member.referrer_name && (
-                          <p className="text-xs text-gray-500 mt-1">전도자: {member.referrer_name}</p>
+                          <p className="text-sm font-medium text-gray-500 mt-1">전도자: {member.referrer_name}</p>
                         )}
                       </div>
                     </div>
@@ -926,7 +997,7 @@ export default function Attendance() {
                                 });
                               }
                             }}
-                            className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl cursor-pointer appearance-none transition-colors"
+                            className="px-3 py-2 text-base font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl cursor-pointer appearance-none transition-colors"
                             style={{
                               minWidth: '100px',
                               backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
@@ -962,7 +1033,7 @@ export default function Attendance() {
                   activeTab === leaderId && groupMembers.map((member) => (
                     <div
                       key={member.id}
-                      className="flex items-center justify-between p-3 border border-gray-200 hover:border-gray-300 rounded-xl transition-all bg-white"
+                      className="flex items-center justify-between p-4 border border-gray-200 hover:border-gray-300 rounded-xl transition-all bg-white"
                     >
                       <div
                         className="flex items-center space-x-4 flex-1 cursor-pointer"
@@ -984,7 +1055,7 @@ export default function Attendance() {
                           ></i>
                         </div>
                         <div className="flex-1">
-                          <p className="font-medium text-gray-800">{member.name}</p>
+                          <p className="font-semibold text-gray-800">{member.name}</p>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
@@ -1015,7 +1086,7 @@ export default function Attendance() {
                                   });
                                 }
                               }}
-                              className="px-3 py-2 text-sm font-medium text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl cursor-pointer appearance-none transition-colors"
+                              className="px-3 py-2 text-base font-semibold text-gray-700 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-xl cursor-pointer appearance-none transition-colors"
                               style={{
                                 minWidth: '100px',
                                 backgroundImage: `url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e")`,
@@ -1055,7 +1126,7 @@ export default function Attendance() {
         <div className="flex space-x-3">
           <button
             onClick={() => navigate('/dashboard')}
-            className="flex-1 bg-white hover:bg-gray-50 text-gray-700 font-semibold py-4 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+            className="flex-1 bg-white hover:bg-gray-50 text-gray-700 font-bold py-4 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
             style={{ boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)' }}
           >
             취소
@@ -1063,7 +1134,7 @@ export default function Attendance() {
           <button
             onClick={handleSave}
             disabled={saving || members.length === 0}
-            className="flex-1 font-semibold py-4 rounded-xl transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50"
+            className="flex-1 font-bold py-4 rounded-xl transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50"
             style={{ backgroundColor: '#1E88E5', color: 'white' }}
           >
             {saving ? '저장 중...' : '출석 저장'}
@@ -1074,13 +1145,13 @@ export default function Attendance() {
       {showAddModal && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
           <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-8 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-2xl font-bold text-gray-800 mb-6">
+            <h3 className="text-3xl font-bold text-gray-800 mb-6">
               {editingMember ? '멤버 수정' : '멤버 추가'}
             </h3>
 
             <form onSubmit={handleSubmit} className="space-y-5">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-base font-bold text-gray-700 mb-2">
                   이름 <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -1088,13 +1159,13 @@ export default function Attendance() {
                   required
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
                   placeholder="이름을 입력하세요"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-2">
+                <label className="block text-base font-bold text-gray-700 mb-2">
                   전화번호 <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -1102,13 +1173,13 @@ export default function Attendance() {
                   required
                   value={formData.phone}
                   onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/[^0-9]/g, '') })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm"
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
                   placeholder="01012345678"
                 />
               </div>
 
               <div className="pt-2 space-y-3">
-                <p className="text-sm font-semibold text-gray-700">역할 <span className="text-red-500">*</span></p>
+                <p className="text-base font-bold text-gray-700">역할 <span className="text-red-500">*</span></p>
 
                 <div className="space-y-2">
                   <label className="flex items-center cursor-pointer">
@@ -1120,7 +1191,7 @@ export default function Attendance() {
                       onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '' })}
                       className="w-5 h-5 text-primary-600 border-gray-300 focus:ring-primary-500 cursor-pointer"
                     />
-                    <span className="ml-3 text-sm font-medium text-gray-700">재적</span>
+                    <span className="ml-3 text-base font-semibold text-gray-700">재적</span>
                   </label>
 
                   <label className="flex items-center cursor-pointer">
@@ -1132,7 +1203,7 @@ export default function Attendance() {
                       onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '' })}
                       className="w-5 h-5 text-primary-600 border-gray-300 focus:ring-primary-500 cursor-pointer"
                     />
-                    <span className="ml-3 text-sm font-medium text-gray-700">구역장</span>
+                    <span className="ml-3 text-base font-semibold text-gray-700">구역장</span>
                   </label>
 
                   <label className="flex items-center cursor-pointer">
@@ -1144,7 +1215,7 @@ export default function Attendance() {
                       onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '' })}
                       className="w-5 h-5 text-primary-600 border-gray-300 focus:ring-primary-500 cursor-pointer"
                     />
-                    <span className="ml-3 text-sm font-medium text-gray-700">새신자</span>
+                    <span className="ml-3 text-base font-semibold text-gray-700">새신자</span>
                   </label>
                 </div>
               </div>
@@ -1152,14 +1223,14 @@ export default function Attendance() {
               {/* 재적인 경우 구역장 선택 */}
               {formData.role === 'regular' && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-base font-bold text-gray-700 mb-2">
                     구역장 <span className="text-red-500">*</span>
                   </label>
                   <select
                     required
                     value={formData.zone_leader_id}
                     onChange={(e) => setFormData({ ...formData, zone_leader_id: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm cursor-pointer"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base cursor-pointer"
                   >
                     <option value="">구역장을 선택하세요</option>
                     {members.filter(m => m.is_zone_leader).map(leader => (
@@ -1172,14 +1243,14 @@ export default function Attendance() {
               {/* 새신자인 경우 전도자 선택 */}
               {formData.role === 'newbie' && (
                 <div>
-                  <label className="block text-sm font-semibold text-gray-700 mb-2">
+                  <label className="block text-base font-bold text-gray-700 mb-2">
                     전도자 <span className="text-red-500">*</span>
                   </label>
                   <select
                     required
                     value={formData.referrer_id}
                     onChange={(e) => setFormData({ ...formData, referrer_id: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-sm cursor-pointer"
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base cursor-pointer"
                   >
                     <option value="">전도자를 선택하세요</option>
                     {(() => {
@@ -1205,22 +1276,22 @@ export default function Attendance() {
                 <button
                   type="button"
                   onClick={closeModal}
-                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold py-3 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+                  className="flex-1 bg-gray-100 hover:bg-gray-200 text-gray-700 font-bold py-3 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
                 >
                   취소
                 </button>
                 {editingMember && (
                   <button
                     type="button"
-                    onClick={() => handleDelete(editingMember.id)}
-                    className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 font-semibold py-3 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+                    onClick={() => handleDeleteClick(editingMember.id)}
+                    className="flex-1 bg-red-50 hover:bg-red-100 text-red-600 font-bold py-3 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
                   >
                     삭제
                   </button>
                 )}
                 <button
                   type="submit"
-                  className="flex-1 font-semibold py-3 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+                  className="flex-1 font-bold py-3 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
                   style={{ backgroundColor: '#1E88E5', color: 'white' }}
                 >
                   {editingMember ? '수정' : '추가'}
