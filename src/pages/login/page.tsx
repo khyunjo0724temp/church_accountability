@@ -227,7 +227,7 @@ export default function Login() {
               <>
                 <div>
                   <label className="block text-base font-semibold text-gray-700 mb-2">
-                    팀 색상 <span className="text-red-500">*</span>
+                    팀 <span className="text-red-500">*</span>
                   </label>
                   <div className="flex space-x-4">
                     <label className="flex items-center cursor-pointer">
