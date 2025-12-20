@@ -12,6 +12,9 @@ interface Member {
   zone_leader_id: string | null;
   zone_leader_name?: string;
   referrer_name?: string;
+  gender?: string;
+  age?: number;
+  region?: string;
 }
 
 export default function Attendance() {
@@ -30,9 +33,12 @@ export default function Attendance() {
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
-    role: '', // 'regular' | 'zone_leader' | 'newbie'
+    role: '', // 'regular' | 'zone_leader' | 'newbie' | 'team_leader'
     zone_leader_id: '',
-    referrer_id: ''
+    referrer_id: '',
+    gender: '',
+    age: '',
+    region: ''
   });
   const [activeTab, setActiveTab] = useState<string>('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
@@ -380,16 +386,25 @@ export default function Attendance() {
 
       if (editingMember) {
         // 수정
+        const updateData: any = {
+          name: formData.name,
+          phone: formData.phone,
+          is_newbie: is_newbie,
+          is_zone_leader: is_zone_leader,
+          is_team_leader: is_team_leader,
+          zone_leader_id: zone_leader_id
+        };
+
+        // 새신자인 경우 성별, 연령, 지역 추가
+        if (is_newbie) {
+          updateData.gender = formData.gender || null;
+          updateData.age = formData.age ? parseInt(formData.age) : null;
+          updateData.region = formData.region || null;
+        }
+
         const { error } = await supabase
           .from('members')
-          .update({
-            name: formData.name,
-            phone: formData.phone,
-            is_newbie: is_newbie,
-            is_zone_leader: is_zone_leader,
-            is_team_leader: is_team_leader,
-            zone_leader_id: zone_leader_id
-          })
+          .update(updateData)
           .eq('id', editingMember.id);
 
         if (error) {
@@ -422,17 +437,26 @@ export default function Attendance() {
         closeModal();
       } else {
         // 추가
+        const insertData: any = {
+          team_id: user.team_id,
+          name: formData.name,
+          phone: formData.phone,
+          is_newbie: is_newbie,
+          is_zone_leader: is_zone_leader,
+          is_team_leader: is_team_leader,
+          zone_leader_id: zone_leader_id
+        };
+
+        // 새신자인 경우 성별, 연령, 지역 추가
+        if (is_newbie) {
+          insertData.gender = formData.gender || null;
+          insertData.age = formData.age ? parseInt(formData.age) : null;
+          insertData.region = formData.region || null;
+        }
+
         const { data: newMember, error } = await supabase
           .from('members')
-          .insert({
-            team_id: user.team_id,
-            name: formData.name,
-            phone: formData.phone,
-            is_newbie: is_newbie,
-            is_zone_leader: is_zone_leader,
-            is_team_leader: is_team_leader,
-            zone_leader_id: zone_leader_id
-          })
+          .insert(insertData)
           .select()
           .single();
 
@@ -515,7 +539,10 @@ export default function Attendance() {
       phone: '',
       role: '', // 필수 선택
       zone_leader_id: '',
-      referrer_id: user.id || '' // 팀장을 기본 전도자로 설정
+      referrer_id: user.id || '', // 팀장을 기본 전도자로 설정
+      gender: '',
+      age: '',
+      region: ''
     });
     setShowAddModal(true);
   };
@@ -552,7 +579,10 @@ export default function Attendance() {
       phone: member.phone,
       role: role,
       zone_leader_id: member.zone_leader_id || '',
-      referrer_id: referrerId
+      referrer_id: referrerId,
+      gender: member.gender || '',
+      age: member.age ? String(member.age) : '',
+      region: member.region || ''
     });
     setShowAddModal(true);
   };
@@ -1271,34 +1301,79 @@ export default function Attendance() {
 
               {/* 새신자인 경우 전도자 선택 */}
               {formData.role === 'newbie' && (
-                <div>
-                  <label className="block text-base font-bold text-gray-700 mb-2">
-                    전도자 <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    required
-                    value={formData.referrer_id}
-                    onChange={(e) => setFormData({ ...formData, referrer_id: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base cursor-pointer"
-                  >
-                    <option value="">전도자를 선택하세요</option>
-                    {(() => {
-                      const user = JSON.parse(localStorage.getItem('user') || '{}');
-                      return (
-                        <>
-                          <option key={user.id} value={user.id}>
-                            {user.name} (팀장)
-                          </option>
-                          {members.filter(m => !m.is_newbie).map((member) => (
-                            <option key={member.id} value={member.id}>
-                              {member.name}{member.is_zone_leader ? ' (구역장)' : ''}
+                <>
+                  <div>
+                    <label className="block text-base font-bold text-gray-700 mb-2">
+                      전도자 <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={formData.referrer_id}
+                      onChange={(e) => setFormData({ ...formData, referrer_id: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base cursor-pointer"
+                    >
+                      <option value="">전도자를 선택하세요</option>
+                      {(() => {
+                        const user = JSON.parse(localStorage.getItem('user') || '{}');
+                        return (
+                          <>
+                            <option key={user.id} value={user.id}>
+                              {user.name} (팀장)
                             </option>
-                          ))}
-                        </>
-                      );
-                    })()}
-                  </select>
-                </div>
+                            {members.filter(m => !m.is_newbie).map((member) => (
+                              <option key={member.id} value={member.id}>
+                                {member.name}{member.is_zone_leader ? ' (구역장)' : ''}
+                              </option>
+                            ))}
+                          </>
+                        );
+                      })()}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-base font-bold text-gray-700 mb-2">
+                      성별
+                    </label>
+                    <select
+                      value={formData.gender}
+                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base cursor-pointer"
+                    >
+                      <option value="">선택하세요</option>
+                      <option value="남">남</option>
+                      <option value="여">여</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-base font-bold text-gray-700 mb-2">
+                      연령
+                    </label>
+                    <input
+                      type="number"
+                      value={formData.age}
+                      onChange={(e) => setFormData({ ...formData, age: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
+                      placeholder="나이를 입력하세요"
+                      min="0"
+                      max="150"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-base font-bold text-gray-700 mb-2">
+                      지역
+                    </label>
+                    <input
+                      type="text"
+                      value={formData.region}
+                      onChange={(e) => setFormData({ ...formData, region: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
+                      placeholder="지역을 입력하세요"
+                    />
+                  </div>
+                </>
               )}
 
               <div className="flex space-x-3 pt-6">
