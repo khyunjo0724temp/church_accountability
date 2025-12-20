@@ -334,16 +334,16 @@ export default function Attendance() {
       // 역할에 따른 플래그 설정
       const is_zone_leader = formData.role === 'zone_leader';
       const is_newbie = formData.role === 'newbie';
-      const is_team_leader = false;
+      const is_team_leader = formData.role === 'team_leader';
 
       // zone_leader_id 계산
       let zone_leader_id = null;
 
-      if (formData.role === 'zone_leader') {
-        // 구역장은 zone_leader_id가 없음
+      if (formData.role === 'zone_leader' || formData.role === 'team_leader') {
+        // 구역장과 팀장은 zone_leader_id가 없음
         zone_leader_id = null;
       } else if (formData.role === 'regular') {
-        // 재적은 선택한 구역장
+        // 재적은 선택한 구역장/팀장
         zone_leader_id = formData.zone_leader_id;
       } else if (formData.role === 'newbie') {
         // 새신자는 전도자에 따라 자동 계산
@@ -514,6 +514,8 @@ export default function Attendance() {
     let role = 'regular';
     if (member.is_zone_leader) {
       role = 'zone_leader';
+    } else if (member.is_team_leader) {
+      role = 'team_leader';
     } else if (member.is_newbie) {
       role = 'newbie';
     }
@@ -1210,6 +1212,18 @@ export default function Attendance() {
                     <input
                       type="radio"
                       name="role"
+                      value="team_leader"
+                      checked={formData.role === 'team_leader'}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '' })}
+                      className="w-5 h-5 text-primary-600 border-gray-300 focus:ring-primary-500 cursor-pointer"
+                    />
+                    <span className="ml-3 text-base font-semibold text-gray-700">팀장</span>
+                  </label>
+
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name="role"
                       value="newbie"
                       checked={formData.role === 'newbie'}
                       onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '' })}
@@ -1220,11 +1234,11 @@ export default function Attendance() {
                 </div>
               </div>
 
-              {/* 재적인 경우 구역장 선택 */}
+              {/* 재적인 경우 구역장/팀장 선택 */}
               {formData.role === 'regular' && (
                 <div>
                   <label className="block text-base font-bold text-gray-700 mb-2">
-                    구역장 <span className="text-red-500">*</span>
+                    구역장/팀장 <span className="text-red-500">*</span>
                   </label>
                   <select
                     required
@@ -1232,9 +1246,11 @@ export default function Attendance() {
                     onChange={(e) => setFormData({ ...formData, zone_leader_id: e.target.value })}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base cursor-pointer"
                   >
-                    <option value="">구역장을 선택하세요</option>
-                    {members.filter(m => m.is_zone_leader).map(leader => (
-                      <option key={leader.id} value={leader.id}>{leader.name}</option>
+                    <option value="">구역장/팀장을 선택하세요</option>
+                    {members.filter(m => m.is_zone_leader || m.is_team_leader).map(leader => (
+                      <option key={leader.id} value={leader.id}>
+                        {leader.name} {leader.is_team_leader ? '(팀장)' : '(구역장)'}
+                      </option>
                     ))}
                   </select>
                 </div>
