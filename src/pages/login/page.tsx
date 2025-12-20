@@ -93,31 +93,32 @@ export default function Login() {
 
         // 2. 팀 생성 또는 조회
         let teamId = null;
-        if (formData.teamName) {
-          const { data: existingTeam } = await supabase
+        // 팀명이 없으면 색상(청팀/백팀)을 팀명으로 사용
+        const teamName = formData.teamName || formData.teamColor;
+
+        const { data: existingTeam } = await supabase
+          .from('teams')
+          .select('id')
+          .eq('name', teamName)
+          .single();
+
+        if (existingTeam) {
+          teamId = existingTeam.id;
+        } else {
+          const { data: newTeam, error: teamError } = await supabase
             .from('teams')
-            .select('id')
-            .eq('name', formData.teamName)
+            .insert({
+              name: teamName,
+              team_color: formData.teamColor
+            })
+            .select()
             .single();
 
-          if (existingTeam) {
-            teamId = existingTeam.id;
-          } else {
-            const { data: newTeam, error: teamError } = await supabase
-              .from('teams')
-              .insert({
-                name: formData.teamName,
-                team_color: formData.teamColor
-              })
-              .select()
-              .single();
-
-            if (teamError) {
-              setError('팀 생성에 실패했습니다');
-              return;
-            }
-            teamId = newTeam.id;
+          if (teamError) {
+            setError('팀 생성에 실패했습니다');
+            return;
           }
+          teamId = newTeam.id;
         }
 
         // 3. 사용자 생성
