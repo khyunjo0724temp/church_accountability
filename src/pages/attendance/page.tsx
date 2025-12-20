@@ -1195,34 +1195,6 @@ export default function Attendance() {
             </h3>
 
             <form onSubmit={handleSubmit} className="space-y-5">
-              <div>
-                <label className="block text-base font-bold text-gray-700 mb-2">
-                  이름 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="text"
-                  required
-                  value={formData.name}
-                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
-                  placeholder="이름을 입력하세요"
-                />
-              </div>
-
-              <div>
-                <label className="block text-base font-bold text-gray-700 mb-2">
-                  전화번호 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="tel"
-                  required
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/[^0-9]/g, '') })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
-                  placeholder="01012345678"
-                />
-              </div>
-
               <div className="pt-2 space-y-3">
                 <p className="text-base font-bold text-gray-700">역할 <span className="text-red-500">*</span></p>
 
@@ -1275,6 +1247,34 @@ export default function Attendance() {
                     <span className="ml-3 text-base font-semibold text-gray-700">새신자</span>
                   </label>
                 </div>
+              </div>
+
+              <div>
+                <label className="block text-base font-bold text-gray-700 mb-2">
+                  이름 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
+                  placeholder="이름을 입력하세요"
+                />
+              </div>
+
+              <div>
+                <label className="block text-base font-bold text-gray-700 mb-2">
+                  전화번호 <span className="text-red-500">*</span>
+                </label>
+                <input
+                  type="tel"
+                  required
+                  value={formData.phone}
+                  onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/[^0-9]/g, '') })}
+                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
+                  placeholder="01012345678"
+                />
               </div>
 
               {/* 재적인 경우 구역장/팀장 선택 */}
