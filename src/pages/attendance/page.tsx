@@ -34,7 +34,7 @@ export default function Attendance() {
     zone_leader_id: '',
     referrer_id: ''
   });
-  const [activeTab, setActiveTab] = useState<string>('newbies');
+  const [activeTab, setActiveTab] = useState<string>('');
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [teamName, setTeamName] = useState('');
@@ -48,6 +48,19 @@ export default function Attendance() {
   useEffect(() => {
     if (members.length > 0) {
       fetchAttendance();
+
+      // 첫 번째 탭 자동 선택
+      const teamLeaders = members.filter(m => m.is_team_leader);
+      const newbies = members.filter(m => m.is_newbie);
+      const zoneLeaders = members.filter(m => m.is_zone_leader);
+
+      if (teamLeaders.length > 0) {
+        setActiveTab('teamleader');
+      } else if (newbies.length > 0) {
+        setActiveTab('newbies');
+      } else if (zoneLeaders.length > 0) {
+        setActiveTab(zoneLeaders[0].id);
+      }
     }
   }, [selectedDate, members]);
 
