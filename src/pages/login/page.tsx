@@ -229,7 +229,7 @@ export default function Login() {
                   <label className="block text-base font-semibold text-gray-700 mb-2">
                     팀 <span className="text-red-500">*</span>
                   </label>
-                  <div className="flex space-x-4">
+                  <div className="flex flex-col space-y-2">
                     <label className="flex items-center cursor-pointer">
                       <input
                         type="radio"
@@ -251,6 +251,17 @@ export default function Login() {
                         className="w-5 h-5 text-gray-600 border-gray-300 focus:ring-gray-500 cursor-pointer"
                       />
                       <span className="ml-2 text-base font-semibold text-gray-700">백팀</span>
+                    </label>
+                    <label className="flex items-center cursor-pointer">
+                      <input
+                        type="radio"
+                        name="teamColor"
+                        value="교육부서"
+                        checked={formData.teamColor === '교육부서'}
+                        onChange={(e) => setFormData({ ...formData, teamColor: e.target.value })}
+                        className="w-5 h-5 text-green-600 border-gray-300 focus:ring-green-500 cursor-pointer"
+                      />
+                      <span className="ml-2 text-base font-semibold text-gray-700">교육부서</span>
                     </label>
                   </div>
                 </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../lib/supabase';
+import * as XLSX from 'xlsx';
 
 interface ReportData {
   totals: {
@@ -529,8 +530,261 @@ export default function Reports() {
     }
   };
 
-  const handleExport = () => {
-    alert('CSV 내보내기 기능은 곧 제공됩니다');
+  const handleExport = async () => {
+    try {
+      setLoading(true);
+
+      // URL 파라미터 확인
+      const teamColorParam = searchParams.get('team_color');
+      const viewAll = searchParams.get('view') === 'all';
+
+      // 팀 데이터 가져오기 (팀 색상 필터링)
+      let teamsQuery = supabase.from('teams').select('id, name').order('name');
+
+      if (teamColorParam) {
+        teamsQuery = teamsQuery.eq('team_color', teamColorParam);
+      }
+
+      const { data: teamsData, error: teamsError } = await teamsQuery;
+      if (teamsError) throw teamsError;
+
+      // 팀 ID 목록 추출
+      const teamIds = teamsData?.map(t => t.id) || [];
+
+      // 새신자 가져오기 (팀 ID로 필터링)
+      let newbiesQuery = supabase
+        .from('members')
+        .select('id, name, phone, gender, age, region, team_id')
+        .eq('is_newbie', true);
+
+      if (teamIds.length > 0) {
+        newbiesQuery = newbiesQuery.in('team_id', teamIds);
+      }
+
+      const { data: newbiesData, error: newbiesError } = await newbiesQuery.order('name');
+      if (newbiesError) throw newbiesError;
+
+      // 전도자 정보 가져오기
+      const { data: referralsData, error: referralsError } = await supabase
+        .from('referrals')
+        .select('new_member_id, referrer_id');
+
+      if (referralsError) throw referralsError;
+
+      // 전도자 이름 조회를 위한 members와 users 가져오기
+      const { data: membersData } = await supabase
+        .from('members')
+        .select('id, name');
+
+      const { data: usersData } = await supabase
+        .from('users')
+        .select('id, name');
+
+      // 날짜 범위 계산
+      let startDate = '';
+      let endDate = '';
+      let dateColumns: { label: string; date: string }[] = [];
+
+      if (period === 'month') {
+        // 월간: 해당 월의 모든 일요일
+        const year = selectedDate.getFullYear();
+        const month = selectedDate.getMonth();
+        const firstDay = new Date(year, month, 1);
+        const lastDay = new Date(year, month + 1, 0);
+
+        startDate = `${year}-${String(month + 1).padStart(2, '0')}-01`;
+        endDate = `${year}-${String(month + 1).padStart(2, '0')}-${String(lastDay.getDate()).padStart(2, '0')}`;
+
+        // 해당 월의 모든 일요일 찾기
+        const sundays: Date[] = [];
+        const current = new Date(firstDay);
+
+        // 첫 번째 일요일 찾기
+        while (current.getDay() !== 0) {
+          current.setDate(current.getDate() + 1);
+        }
+
+        // 모든 일요일 수집
+        while (current <= lastDay) {
+          sundays.push(new Date(current));
+          current.setDate(current.getDate() + 7);
+        }
+
+        // 주차별 컬럼 생성 (1월 1주, 1월 2주, ...)
+        dateColumns = sundays.map((sunday, index) => ({
+          label: `${month + 1}월 ${index + 1}주`,
+          date: `${sunday.getFullYear()}-${String(sunday.getMonth() + 1).padStart(2, '0')}-${String(sunday.getDate()).padStart(2, '0')}`
+        }));
+      } else if (period === 'year') {
+        // 연간: 해당 년도의 모든 월
+        const year = selectedDate.getFullYear();
+        startDate = `${year}-01-01`;
+        endDate = `${year}-12-31`;
+
+        // 월별 컬럼 생성 (1월, 2월, 3월, ...)
+        dateColumns = Array.from({ length: 12 }, (_, i) => ({
+          label: `${i + 1}월`,
+          date: `${year}-${String(i + 1).padStart(2, '0')}`
+        }));
+      } else {
+        alert('주간 탭에서는 내보내기를 지원하지 않습니다');
+        setLoading(false);
+        return;
+      }
+
+      // 출석 기록 가져오기
+      const { data: attendanceData, error: attendanceError } = await supabase
+        .from('attendance_records')
+        .select('member_id, present, week_start_date')
+        .gte('week_start_date', startDate)
+        .lte('week_start_date', endDate);
+
+      if (attendanceError) throw attendanceError;
+
+      // 엑셀 데이터 생성
+      const columnTotals: { [key: string]: number } = {};
+      dateColumns.forEach(col => {
+        columnTotals[col.label] = 0;
+      });
+      let grandTotal = 0;
+
+      const excelData = newbiesData?.map((newbie, index) => {
+        const team = teamsData?.find(t => t.id === newbie.team_id);
+        const referral = referralsData?.find(r => r.new_member_id === newbie.id);
+
+        let referrerName = '';
+        if (referral) {
+          const referrerMember = membersData?.find(m => m.id === referral.referrer_id);
+          const referrerUser = usersData?.find(u => u.id === referral.referrer_id);
+          referrerName = referrerMember?.name || referrerUser?.name || '';
+        }
+
+        const row: any = {
+          '소속': team?.name || '',
+          '이름': newbie.name,
+          '성별': newbie.gender || '',
+          '연령': newbie.age ? `${newbie.age}세` : '',
+          '전화번호': newbie.phone || '',
+          '지역': newbie.region || '',
+          '전도자': referrerName
+        };
+
+        // 출석 데이터 추가
+        let totalAttendance = 0;
+        dateColumns.forEach(col => {
+          let isPresent = false;
+
+          if (period === 'month') {
+            // 월간: 특정 일요일의 출석 여부
+            isPresent = attendanceData?.some(
+              a => a.member_id === newbie.id && a.present && a.week_start_date === col.date
+            ) || false;
+          } else if (period === 'year') {
+            // 연간: 해당 월에 한 번이라도 출석했는지
+            isPresent = attendanceData?.some(
+              a => a.member_id === newbie.id &&
+                   a.present &&
+                   a.week_start_date.startsWith(col.date)
+            ) || false;
+          }
+
+          row[col.label] = isPresent ? 'O' : '';
+          if (isPresent) {
+            totalAttendance++;
+            columnTotals[col.label]++;
+            grandTotal++;
+          }
+        });
+
+        row['합계'] = totalAttendance;
+
+        return row;
+      }) || [];
+
+      // 이름 기준으로 가나다순 정렬
+      excelData.sort((a, b) => {
+        return a['이름'].localeCompare(b['이름'], 'ko-KR');
+      });
+
+      // 합계 행 추가
+      const totalRow: any = {
+        '소속': '',
+        '이름': '',
+        '성별': '',
+        '연령': '',
+        '전화번호': '',
+        '지역': '',
+        '전도자': ''
+      };
+
+      dateColumns.forEach(col => {
+        totalRow[col.label] = columnTotals[col.label];
+      });
+
+      totalRow['합계'] = grandTotal;
+
+      excelData.push(totalRow);
+
+      // 배열의 배열로 변환 (순번 컬럼 추가를 위해)
+      const headers = ['', '소속', '이름', '성별', '연령', '전화번호', '지역', '전도자', ...dateColumns.map(c => c.label), '합계'];
+
+      const rows = excelData.map((row, index) => {
+        const isTotal = row['소속'] === '' && row['이름'] === '' && index === excelData.length - 1;
+        return [
+          isTotal ? '합계' : index + 1, // 순번 컬럼에 합계 또는 번호
+          row['소속'],
+          row['이름'],
+          row['성별'],
+          row['연령'],
+          row['전화번호'],
+          row['지역'],
+          row['전도자'],
+          ...dateColumns.map(col => row[col.label]),
+          row['합계']
+        ];
+      });
+
+      // 워크시트 생성 (배열의 배열 방식)
+      const worksheet = XLSX.utils.aoa_to_sheet([headers, ...rows]);
+
+      // 컬럼 너비 설정
+      const columnWidths = [
+        { wch: 8 },  // 순번
+        { wch: 15 }, // 소속
+        { wch: 10 }, // 이름
+        { wch: 8 },  // 성별
+        { wch: 8 },  // 연령
+        { wch: 15 }, // 전화번호
+        { wch: 12 }, // 지역
+        { wch: 10 }, // 전도자
+        ...dateColumns.map(() => ({ wch: 10 })), // 날짜 컬럼들
+        { wch: 8 }   // 합계
+      ];
+      worksheet['!cols'] = columnWidths;
+
+      // 워크북 생성
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, '새신자 출석');
+
+      // 파일명 생성
+      let fileNamePrefix = '새신자_출석';
+      if (teamColorParam) {
+        fileNamePrefix = `${teamColorParam}_${fileNamePrefix}`;
+      }
+
+      const fileName = period === 'month'
+        ? `${fileNamePrefix}_${selectedDate.getFullYear()}년_${selectedDate.getMonth() + 1}월.xlsx`
+        : `${fileNamePrefix}_${selectedDate.getFullYear()}년.xlsx`;
+
+      // 파일 다운로드
+      XLSX.writeFile(workbook, fileName);
+
+      setLoading(false);
+    } catch (error) {
+      console.error('엑셀 내보내기 실패:', error);
+      alert('엑셀 내보내기에 실패했습니다');
+      setLoading(false);
+    }
   };
 
   const totalPoints = period === 'week' ? (reportData?.totals?.weeklyPoints || 0) :
@@ -642,6 +896,23 @@ export default function Reports() {
                 >
                   <i className={`ri-team-line text-2xl ${teamColorParam === '백팀' ? 'text-white' : 'text-gray-600'}`}></i>
                   <span className={teamColorParam === '백팀' ? 'text-white' : 'text-gray-900'}>백팀</span>
+                </button>
+
+                {/* 교육부서 버튼 */}
+                <button
+                  onClick={() => {
+                    navigate('/reports?team_color=교육부서');
+                    setSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors ${
+                    teamColorParam === '교육부서'
+                      ? 'text-white'
+                      : 'hover:bg-gray-50 text-gray-700'
+                  }`}
+                  style={teamColorParam === '교육부서' ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
+                >
+                  <i className={`ri-team-line text-2xl ${teamColorParam === '교육부서' ? 'text-white' : 'text-green-600'}`}></i>
+                  <span className={teamColorParam === '교육부서' ? 'text-white' : 'text-gray-900'}>교육부서</span>
                 </button>
 
                 {/* 구분선 */}
@@ -793,6 +1064,19 @@ export default function Reports() {
             </button>
           </div>
         </div>
+
+        {/* 내보내기 버튼 (전체/청팀/백팀 탭에서 표시, 주간 제외) */}
+        {(viewAll || teamColorParam) && period !== 'week' && (
+          <div className="mb-5 flex justify-end">
+            <button
+              onClick={handleExport}
+              className="flex items-center space-x-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition-colors cursor-pointer"
+            >
+              <i className="ri-file-excel-line text-xl"></i>
+              <span>새신자 데이터 내보내기</span>
+            </button>
+          </div>
+        )}
 
         {/* 출석 현황 카드 (주간 탭에서만 표시) */}
         {period === 'week' && reportData?.weeklyAttendance && (

@@ -366,21 +366,16 @@ export default function Attendance() {
         zone_leader_id = formData.zone_leader_id;
       } else if (formData.role === 'newbie') {
         // 새신자는 전도자에 따라 자동 계산
-        if (formData.referrer_id === user.id) {
+        const referrer = members.find(m => m.id === formData.referrer_id);
+        if (referrer?.is_team_leader) {
           // 팀장이 전도 → 팀장 직속 (zone_leader_id = null)
           zone_leader_id = null;
-        } else {
-          // 일반 멤버가 전도
-          const referrer = members.find(m => m.id === formData.referrer_id);
-          if (referrer) {
-            if (referrer.is_zone_leader) {
-              // 구역장이 전도 → 해당 구역장 직속
-              zone_leader_id = referrer.id;
-            } else {
-              // 재적이 전도 → 전도자의 구역장 직속
-              zone_leader_id = referrer.zone_leader_id;
-            }
-          }
+        } else if (referrer?.is_zone_leader) {
+          // 구역장이 전도 → 해당 구역장 직속
+          zone_leader_id = referrer.id;
+        } else if (referrer) {
+          // 재적이 전도 → 전도자의 구역장 직속
+          zone_leader_id = referrer.zone_leader_id;
         }
       }
 
@@ -533,13 +528,12 @@ export default function Attendance() {
 
   const openAddModal = () => {
     setEditingMember(null);
-    const user = JSON.parse(localStorage.getItem('user') || '{}');
     setFormData({
       name: '',
       phone: '',
       role: '', // 필수 선택
       zone_leader_id: '',
-      referrer_id: user.id || '', // 팀장을 기본 전도자로 설정
+      referrer_id: '', // 전도자 직접 선택
       gender: '',
       age: '',
       region: ''
@@ -1299,59 +1293,16 @@ export default function Attendance() {
                 </div>
               )}
 
-              {/* 새신자인 경우 전도자 선택 */}
+              {/* 새신자인 경우 추가 정보 입력 */}
               {formData.role === 'newbie' && (
                 <>
                   <div>
                     <label className="block text-base font-bold text-gray-700 mb-2">
-                      전도자 <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      required
-                      value={formData.referrer_id}
-                      onChange={(e) => setFormData({ ...formData, referrer_id: e.target.value })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base cursor-pointer"
-                    >
-                      <option value="">전도자를 선택하세요</option>
-                      {(() => {
-                        const user = JSON.parse(localStorage.getItem('user') || '{}');
-                        return (
-                          <>
-                            <option key={user.id} value={user.id}>
-                              {user.name} (팀장)
-                            </option>
-                            {members.filter(m => !m.is_newbie).map((member) => (
-                              <option key={member.id} value={member.id}>
-                                {member.name}{member.is_zone_leader ? ' (구역장)' : ''}
-                              </option>
-                            ))}
-                          </>
-                        );
-                      })()}
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-base font-bold text-gray-700 mb-2">
-                      성별
-                    </label>
-                    <select
-                      value={formData.gender}
-                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base cursor-pointer"
-                    >
-                      <option value="">선택하세요</option>
-                      <option value="남">남</option>
-                      <option value="여">여</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="block text-base font-bold text-gray-700 mb-2">
-                      연령
+                      연령 <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="number"
+                      required
                       value={formData.age}
                       onChange={(e) => setFormData({ ...formData, age: e.target.value })}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
@@ -1363,15 +1314,52 @@ export default function Attendance() {
 
                   <div>
                     <label className="block text-base font-bold text-gray-700 mb-2">
-                      지역
+                      지역 <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
+                      required
                       value={formData.region}
                       onChange={(e) => setFormData({ ...formData, region: e.target.value })}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
                       placeholder="지역을 입력하세요"
                     />
+                  </div>
+
+                  <div>
+                    <label className="block text-base font-bold text-gray-700 mb-2">
+                      전도자 <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={formData.referrer_id}
+                      onChange={(e) => setFormData({ ...formData, referrer_id: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base cursor-pointer"
+                    >
+                      <option value="">전도자를 선택하세요</option>
+                      {members.filter(m => !m.is_newbie).map((member) => (
+                        <option key={member.id} value={member.id}>
+                          {member.name}
+                          {member.is_team_leader ? ' (팀장)' : member.is_zone_leader ? ' (구역장)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-base font-bold text-gray-700 mb-2">
+                      성별 <span className="text-red-500">*</span>
+                    </label>
+                    <select
+                      required
+                      value={formData.gender}
+                      onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
+                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base cursor-pointer"
+                    >
+                      <option value="">선택하세요</option>
+                      <option value="남">남</option>
+                      <option value="여">여</option>
+                    </select>
                   </div>
                 </>
               )}
