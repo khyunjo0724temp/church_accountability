@@ -117,6 +117,13 @@ export default function Reports() {
     }
   }
 
+  function formatDate(date: Date): string {
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+  }
+
   function formatTitleDate(date: Date): string {
     if (period === 'week') {
       const month = date.getMonth() + 1;
@@ -530,6 +537,161 @@ export default function Reports() {
     }
   };
 
+  const handleWeeklyExport = async () => {
+    try {
+      // URL 파라미터 확인
+      const teamColorParam = searchParams.get('team_color');
+      const dateStr = formatDate(selectedDate);
+      const dateDisplay = `${selectedDate.getFullYear()}년 ${selectedDate.getMonth() + 1}월 ${selectedDate.getDate()}일`;
+
+      // 팀 데이터 가져오기
+      let teamsQuery = supabase.from('teams').select('id, name, team_color').order('name');
+      if (teamColorParam) {
+        teamsQuery = teamsQuery.eq('team_color', teamColorParam);
+      }
+      const { data: teamsData } = await teamsQuery;
+      const teamIds = teamsData?.map(t => t.id) || [];
+
+      // 전체 멤버 가져오기
+      let membersQuery = supabase
+        .from('members')
+        .select('id, name, phone, team_id, is_newbie, is_team_leader, is_zone_leader, zone_leader_id');
+      if (teamIds.length > 0) {
+        membersQuery = membersQuery.in('team_id', teamIds);
+      }
+      const { data: allMembers } = await membersQuery;
+
+      // 출석 기록 가져오기
+      const { data: attendanceData } = await supabase
+        .from('attendance_records')
+        .select('member_id, present, absence_reason')
+        .eq('week_start_date', dateStr);
+
+      // 전도 기록 가져오기 (이번 주)
+      const { data: referralsData } = await supabase
+        .from('referrals')
+        .select('new_member_id, referrer_id')
+        .gte('created_at', dateStr);
+
+      // 엑셀 데이터 생성
+      const excelData: any[] = [];
+
+      // 헤더 행
+      excelData.push([
+        '결재', '담당자', '담임목사', `${teamColorParam || '전체'} 주일 결석자 내역서`, '', '', '', '', '', ''
+      ]);
+      excelData.push([
+        '', '', '', `(${dateDisplay})`, '', '', '', '', '', ''
+      ]);
+      excelData.push([]); // 빈 행
+
+      // 컬럼 헤더
+      excelData.push([
+        '팀명',
+        '재적',
+        '출석',
+        '결석',
+        '새가족',
+        '전도',
+        '정착',
+        '결석자(명단) / 전화번호 / 결석사유',
+        '비고'
+      ]);
+
+      // 각 팀별 데이터
+      teamsData?.forEach(team => {
+        const members = allMembers?.filter(m => m.team_id === team.id) || [];
+
+        if (members.length === 0) return;
+
+        const totalMembers = members.length;
+        const presentMembers = members.filter(m =>
+          attendanceData?.some(a => a.member_id === m.id && a.present)
+        );
+        const absentMembers = members.filter(m => {
+          const attendance = attendanceData?.find(a => a.member_id === m.id);
+          return attendance && !attendance.present;
+        });
+        const newbieMembers = members.filter(m =>
+          m.is_newbie && attendanceData?.some(a => a.member_id === m.id && a.present)
+        );
+
+        // 전도 인원 계산 (이 팀 멤버가 전도한 새신자 수)
+        const evangelismCount = referralsData?.filter(r =>
+          members.some(m => m.id === r.referrer_id)
+        ).length || 0;
+
+        // 결석자 정보
+        const absentInfo = absentMembers.map(m => {
+          const attendance = attendanceData?.find(a => a.member_id === m.id);
+          return `${m.name} - ${m.phone || ''} - ${attendance?.absence_reason || ''}`;
+        }).join('\n');
+
+        excelData.push([
+          team.name,
+          totalMembers,
+          presentMembers.length,
+          absentMembers.length,
+          newbieMembers.length,
+          evangelismCount,
+          0, // 정착 (추후 구현)
+          absentInfo,
+          ''
+        ]);
+      });
+
+      // 전체 재적 행
+      const totalCount = allMembers?.length || 0;
+      const totalPresent = attendanceData?.filter(a => a.present).length || 0;
+      const totalAbsent = attendanceData?.filter(a => !a.present).length || 0;
+      const totalNewbies = allMembers?.filter(m =>
+        m.is_newbie && attendanceData?.some(a => a.member_id === m.id && a.present)
+      ).length || 0;
+
+      excelData.push([]);
+      excelData.push([
+        '전체 재적',
+        totalCount,
+        totalPresent,
+        totalAbsent,
+        totalNewbies,
+        referralsData?.length || 0,
+        0,
+        '',
+        ''
+      ]);
+
+      // 워크시트 생성
+      const worksheet = XLSX.utils.aoa_to_sheet(excelData);
+
+      // 컬럼 너비 설정
+      worksheet['!cols'] = [
+        { wch: 20 }, // 팀명
+        { wch: 8 },  // 재적
+        { wch: 8 },  // 출석
+        { wch: 8 },  // 결석
+        { wch: 8 },  // 새가족
+        { wch: 8 },  // 전도
+        { wch: 8 },  // 정착
+        { wch: 50 }, // 결석자 정보
+        { wch: 15 }  // 비고
+      ];
+
+      // 워크북 생성
+      const workbook = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(workbook, worksheet, '주일 결석자 내역서');
+
+      // 파일명 생성
+      const fileName = `${teamColorParam || '전체'}_주일_결석자_내역서_${selectedDate.getFullYear()}년_${selectedDate.getMonth() + 1}월_${selectedDate.getDate()}일.xlsx`;
+
+      // 파일 다운로드
+      XLSX.writeFile(workbook, fileName);
+    } catch (error) {
+      console.error('주간 엑셀 내보내기 실패:', error);
+      alert('엑셀 내보내기에 실패했습니다');
+    }
+  };
+
   const handleExport = async () => {
     try {
       setLoading(true);
@@ -626,8 +788,13 @@ export default function Reports() {
           label: `${i + 1}월`,
           date: `${year}-${String(i + 1).padStart(2, '0')}`
         }));
+      } else if (period === 'week') {
+        // 주간: 주일 결석자 내역서 생성
+        await handleWeeklyExport();
+        setLoading(false);
+        return;
       } else {
-        alert('주간 탭에서는 내보내기를 지원하지 않습니다');
+        alert('지원하지 않는 기간입니다');
         setLoading(false);
         return;
       }
@@ -853,14 +1020,13 @@ export default function Reports() {
                     navigate('/reports?view=all');
                     setSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors ${
+                  className={`w-full flex items-center px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors ${
                     viewAll
                       ? 'text-white'
                       : 'hover:bg-gray-50 text-gray-700'
                   }`}
                   style={viewAll ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
                 >
-                  <i className={`ri-dashboard-line text-2xl ${viewAll ? 'text-white' : 'text-gray-600'}`}></i>
                   <span className={viewAll ? 'text-white' : 'text-gray-900'}>전체</span>
                 </button>
 
@@ -870,14 +1036,13 @@ export default function Reports() {
                     navigate('/reports?team_color=청팀');
                     setSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors ${
+                  className={`w-full flex items-center px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors ${
                     teamColorParam === '청팀'
                       ? 'text-white'
                       : 'hover:bg-gray-50 text-gray-700'
                   }`}
                   style={teamColorParam === '청팀' ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
                 >
-                  <i className={`ri-team-line text-2xl ${teamColorParam === '청팀' ? 'text-white' : 'text-blue-600'}`}></i>
                   <span className={teamColorParam === '청팀' ? 'text-white' : 'text-gray-900'}>청팀</span>
                 </button>
 
@@ -887,14 +1052,13 @@ export default function Reports() {
                     navigate('/reports?team_color=백팀');
                     setSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors ${
+                  className={`w-full flex items-center px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors ${
                     teamColorParam === '백팀'
                       ? 'text-white'
                       : 'hover:bg-gray-50 text-gray-700'
                   }`}
                   style={teamColorParam === '백팀' ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
                 >
-                  <i className={`ri-team-line text-2xl ${teamColorParam === '백팀' ? 'text-white' : 'text-gray-600'}`}></i>
                   <span className={teamColorParam === '백팀' ? 'text-white' : 'text-gray-900'}>백팀</span>
                 </button>
 
@@ -904,14 +1068,13 @@ export default function Reports() {
                     navigate('/reports?team_color=교육부서');
                     setSidebarOpen(false);
                   }}
-                  className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors ${
+                  className={`w-full flex items-center px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors ${
                     teamColorParam === '교육부서'
                       ? 'text-white'
                       : 'hover:bg-gray-50 text-gray-700'
                   }`}
                   style={teamColorParam === '교육부서' ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
                 >
-                  <i className={`ri-team-line text-2xl ${teamColorParam === '교육부서' ? 'text-white' : 'text-green-600'}`}></i>
                   <span className={teamColorParam === '교육부서' ? 'text-white' : 'text-gray-900'}>교육부서</span>
                 </button>
 
@@ -926,14 +1089,13 @@ export default function Reports() {
                       navigate(`/reports?team_id=${team.id}`);
                       setSidebarOpen(false);
                     }}
-                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors ${
+                    className={`w-full flex items-center px-4 py-3 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors ${
                       currentTeamId === team.id
                         ? 'text-white'
                         : 'hover:bg-gray-50 text-gray-700'
                     }`}
                     style={currentTeamId === team.id ? { backgroundColor: '#1E88E5', color: 'white' } : {}}
                   >
-                    <i className={`ri-team-line text-2xl ${currentTeamId === team.id ? 'text-white' : 'text-gray-600'}`}></i>
                     <span className={currentTeamId === team.id ? 'text-white' : 'text-gray-900'}>{team.name}</span>
                   </button>
                 ))}
@@ -1065,15 +1227,15 @@ export default function Reports() {
           </div>
         </div>
 
-        {/* 내보내기 버튼 (전체/청팀/백팀 탭에서 표시, 주간 제외) */}
-        {(viewAll || teamColorParam) && period !== 'week' && (
+        {/* 내보내기 버튼 (전체/청팀/백팀/교육부서 탭에서 표시) */}
+        {(viewAll || teamColorParam) && (
           <div className="mb-5 flex justify-end">
             <button
               onClick={handleExport}
               className="flex items-center space-x-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white rounded-xl font-bold transition-colors cursor-pointer"
             >
               <i className="ri-file-excel-line text-xl"></i>
-              <span>새신자 데이터 내보내기</span>
+              <span>엑셀 다운로드</span>
             </button>
           </div>
         )}
