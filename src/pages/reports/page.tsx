@@ -317,40 +317,60 @@ export default function Reports() {
         console.error('사용자 로드 실패:', usersError);
       }
 
+      // 출석 기록이 있는지 확인 (한 명이라도 체크했는지)
+      const hasAttendanceRecords = (attendanceData?.length || 0) > 0;
+
       const totalMembers = membersData?.length || 0;
-      const totalAttendance = attendanceData?.filter(r => r.present).length || 0;
-      // 재적 멤버의 결석만 계산 (새신자는 결석 기록이 없음)
-      const totalAbsent = attendanceData?.filter(r => !r.present).length || 0;
 
-      // 재적 출석 계산
-      const regularAttendance = attendanceData?.filter(r => {
-        const member = membersData?.find(m => m.id === r.member_id);
-        return r.present && member && !member.is_newbie;
-      }).length || 0;
+      let totalAttendance = 0;
+      let totalAbsent = 0;
+      let regularAttendance = 0;
+      let newbieAttendance = 0;
+      let absentees: Array<{ name: string; phone: string }> = [];
 
-      // 새신자 출석 계산
-      const newbieAttendance = attendanceData?.filter(r => {
-        const member = membersData?.find(m => m.id === r.member_id);
-        return r.present && member && member.is_newbie;
-      }).length || 0;
+      if (hasAttendanceRecords) {
+        // 출석 기록이 있으면: 체크 안 된 재적 멤버는 결석 처리
 
-      // 결석자 찾기 (가장 최근 주에서, 재적 멤버만)
-      const latestWeek = attendanceData?.reduce((latest, record) => {
-        return record.week_start_date > latest ? record.week_start_date : latest;
-      }, '');
+        // 재적 멤버만 필터링
+        const regularMembers = membersData?.filter(m => !m.is_newbie) || [];
 
-      const latestRecords = attendanceData?.filter(r => r.week_start_date === latestWeek) || [];
-      const absentMemberIds = latestRecords
-        .filter(r => !r.present)
-        .map(r => r.member_id);
+        // 재적 출석 계산
+        regularAttendance = attendanceData?.filter(r => {
+          const member = membersData?.find(m => m.id === r.member_id);
+          return r.present && member && !member.is_newbie;
+        }).length || 0;
 
-      // 재적 멤버(새신자가 아닌 사람) 중 결석자만
-      const absentees = membersData
-        ?.filter(m => !m.is_newbie && absentMemberIds.includes(m.id))
-        .map(m => ({
-          name: m.name,
-          phone: (m as any).phone || ''
-        })) || [];
+        // 재적 결석 계산: 재적 전체 - 재적 출석
+        totalAbsent = regularMembers.length - regularAttendance;
+
+        // 새신자 출석 계산
+        newbieAttendance = attendanceData?.filter(r => {
+          const member = membersData?.find(m => m.id === r.member_id);
+          return r.present && member && member.is_newbie;
+        }).length || 0;
+
+        // 총 출석: 재적 출석 + 새신자 출석
+        totalAttendance = regularAttendance + newbieAttendance;
+
+        // 결석자 찾기: 출석 기록이 없거나 present=false인 재적 멤버
+        const presentMemberIds = attendanceData
+          ?.filter(r => r.present)
+          .map(r => r.member_id) || [];
+
+        absentees = regularMembers
+          .filter(m => !presentMemberIds.includes(m.id))
+          .map(m => ({
+            name: m.name,
+            phone: (m as any).phone || ''
+          }));
+      } else {
+        // 출석 기록이 없으면: 모두 0
+        totalAttendance = 0;
+        totalAbsent = 0;
+        regularAttendance = 0;
+        newbieAttendance = 0;
+        absentees = [];
+      }
 
       // 점수 계산 및 전도 명단 저장
       const pointsMap = new Map<string, { count: number; members: Array<{ name: string; phone: string; date: string }> }>();
@@ -429,7 +449,9 @@ export default function Reports() {
 
       // 주간 탭일 때만 출석 현황 데이터 추가
       let weeklyAttendanceData = undefined;
-      if (period === 'week') {
+      if (period === 'week' && hasAttendanceRecords) {
+        // 출석 기록이 있을 때만 상세 데이터 생성
+
         // 중복 제거 헬퍼 함수 (id 기준)
         const uniqueById = <T extends { id: string }>(arr: T[]): T[] => {
           const seen = new Set<string>();
@@ -441,6 +463,9 @@ export default function Reports() {
             return true;
           });
         };
+
+        // 재적 멤버 전체
+        const regularMembers = membersData?.filter(m => !m.is_newbie) || [];
 
         // 재적 출석자 명단
         const regularAttendeeMemberIds = attendanceData
@@ -482,34 +507,26 @@ export default function Reports() {
             }) || []
         );
 
-        // 재적 결석자 명단
-        const absentRecords = attendanceData?.filter(r => !r.present) || [];
-
+        // 재적 결석자 명단: 출석 기록이 없거나 present=false인 재적 멤버
         const absenteesWithId = uniqueById(
-          membersData
-            ?.filter(m => !m.is_newbie && absentRecords.some(r => r.member_id === m.id))
+          regularMembers
+            .filter(m => !regularAttendeeMemberIds.includes(m.id))
             .map(m => {
-              const record = absentRecords.find(r => r.member_id === m.id);
+              const record = attendanceData?.find(r => r.member_id === m.id);
               return {
                 id: m.id,
                 name: m.name,
                 phone: (m as any).phone || '',
                 absence_reason: (record as any)?.absence_reason || undefined
               };
-            }) || []
+            })
         );
-
-        // 재적 결석 수 계산
-        const regularAbsent = attendanceData?.filter(r => {
-          const member = membersData?.find(m => m.id === r.member_id);
-          return !r.present && member && !member.is_newbie;
-        }).length || 0;
 
         weeklyAttendanceData = {
           totalAttendance: totalAttendance,
           regularAttendance: regularAttendance,
           newbieAttendance: newbieAttendance,
-          regularAbsent: regularAbsent,
+          regularAbsent: totalAbsent,
           regularAttendees: regularAttendees,
           newbieAttendees: newbieAttendees,
           absentees: absenteesWithId
@@ -598,6 +615,9 @@ export default function Reports() {
         '비고'
       ]);
 
+      // 출석 기록이 있는지 확인
+      const hasAttendanceRecords = (attendanceData?.length || 0) > 0;
+
       // 각 팀별 데이터
       teamsData?.forEach(team => {
         const members = allMembers?.filter(m => m.team_id === team.id) || [];
@@ -608,15 +628,34 @@ export default function Reports() {
         const regularMembers = members.filter(m => !m.is_newbie);
         const totalMembers = regularMembers.length;
 
-        // 재적 출석만 (새신자 출석 제외)
-        const presentMembers = regularMembers.filter(m =>
-          attendanceData?.some(a => a.member_id === m.id && a.present)
-        );
+        let presentMembersCount = 0;
+        let absentMembersCount = 0;
+        let absentInfo = '';
 
-        const absentMembers = regularMembers.filter(m => {
-          const attendance = attendanceData?.find(a => a.member_id === m.id);
-          return attendance && !attendance.present;
-        });
+        if (hasAttendanceRecords) {
+          // 출석 기록이 있으면: 체크 안 된 재적 멤버는 결석 처리
+
+          // 재적 출석만 (새신자 출석 제외)
+          const presentMembers = regularMembers.filter(m =>
+            attendanceData?.some(a => a.member_id === m.id && a.present)
+          );
+          presentMembersCount = presentMembers.length;
+
+          // 재적 결석: 재적 전체 - 재적 출석
+          absentMembersCount = totalMembers - presentMembersCount;
+
+          // 결석자 명단: 출석 기록이 없거나 present=false인 재적 멤버
+          const presentMemberIds = attendanceData
+            ?.filter(a => a.present)
+            .map(a => a.member_id) || [];
+
+          const absentMembers = regularMembers.filter(m => !presentMemberIds.includes(m.id));
+
+          absentInfo = absentMembers.map(m => {
+            const attendance = attendanceData?.find(a => a.member_id === m.id);
+            return `${m.name} - ${m.phone || ''} - ${attendance?.absence_reason || ''}`;
+          }).join('\n');
+        }
 
         // 새신자 출석
         const newbieMembers = members.filter(m =>
@@ -628,17 +667,11 @@ export default function Reports() {
           members.some(m => m.id === r.referrer_id)
         ).length || 0;
 
-        // 결석자 정보
-        const absentInfo = absentMembers.map(m => {
-          const attendance = attendanceData?.find(a => a.member_id === m.id);
-          return `${m.name} - ${m.phone || ''} - ${attendance?.absence_reason || ''}`;
-        }).join('\n');
-
         excelData.push([
           team.name,
           totalMembers,
-          presentMembers.length,
-          absentMembers.length,
+          presentMembersCount,
+          absentMembersCount,
           newbieMembers.length,
           evangelismCount,
           0, // 정착 (추후 구현)
@@ -652,16 +685,20 @@ export default function Reports() {
       const regularMembers = allMembers?.filter(m => !m.is_newbie) || [];
       const totalCount = regularMembers.length;
 
-      // 재적 출석만 (새신자 출석 제외)
-      const totalPresent = regularMembers.filter(m =>
-        attendanceData?.some(a => a.member_id === m.id && a.present)
-      ).length;
+      let totalPresent = 0;
+      let totalAbsent = 0;
 
-      // 재적 결석 (새신자 제외)
-      const totalAbsent = attendanceData?.filter(a => {
-        const member = allMembers?.find(m => m.id === a.member_id);
-        return !a.present && member && !member.is_newbie;
-      }).length || 0;
+      if (hasAttendanceRecords) {
+        // 출석 기록이 있으면: 체크 안 된 재적 멤버는 결석 처리
+
+        // 재적 출석만 (새신자 출석 제외)
+        totalPresent = regularMembers.filter(m =>
+          attendanceData?.some(a => a.member_id === m.id && a.present)
+        ).length;
+
+        // 재적 결석: 재적 전체 - 재적 출석
+        totalAbsent = totalCount - totalPresent;
+      }
 
       // 새신자 출석
       const totalNewbies = allMembers?.filter(m =>
