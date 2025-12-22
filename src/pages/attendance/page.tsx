@@ -45,7 +45,8 @@ export default function Attendance() {
   const [loadingAttendance, setLoadingAttendance] = useState(false);
   const [teamName, setTeamName] = useState('');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [memberToDelete, setMemberToDelete] = useState<string | null>(null);
+  const [memberToDelete, setMemberToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [deleteConfirmName, setDeleteConfirmName] = useState('');
 
   useEffect(() => {
     migrateZoneLeaders();
@@ -514,19 +515,30 @@ export default function Attendance() {
   };
 
   const handleDeleteClick = (id: string) => {
+    // 삭제할 멤버 찾기
+    const member = members.find(m => m.id === id);
+    if (!member) return;
+
     // 삭제 확인 모달 표시
-    setMemberToDelete(id);
+    setMemberToDelete({ id: member.id, name: member.name });
+    setDeleteConfirmName('');
     setShowDeleteConfirm(true);
   };
 
   const handleDelete = async () => {
     if (!memberToDelete) return;
 
+    // 이름 확인
+    if (deleteConfirmName !== memberToDelete.name) {
+      alert('멤버 이름이 일치하지 않습니다');
+      return;
+    }
+
     try {
       const { error } = await supabase
         .from('members')
         .delete()
-        .eq('id', memberToDelete);
+        .eq('id', memberToDelete.id);
 
       if (error) {
         console.error('삭제 실패:', error);
@@ -535,6 +547,7 @@ export default function Attendance() {
 
       setShowDeleteConfirm(false);
       setMemberToDelete(null);
+      setDeleteConfirmName('');
       fetchMembers();
       closeModal();
     } catch (error) {
@@ -799,7 +812,7 @@ export default function Attendance() {
         )}
 
         {/* 삭제 확인 모달 */}
-        {showDeleteConfirm && (
+        {showDeleteConfirm && memberToDelete && (
           <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[60]">
             <div className="bg-white rounded-2xl shadow-xl p-8 max-w-sm w-full mx-4">
               <div className="flex flex-col items-center space-y-4">
@@ -808,11 +821,27 @@ export default function Attendance() {
                 </div>
                 <p className="text-xl font-bold text-gray-900 text-center">정말로 삭제하시겠습니까?</p>
                 <p className="text-base font-medium text-gray-600 text-center">삭제된 멤버는 복구할 수 없습니다.</p>
+
+                <div className="w-full">
+                  <p className="text-sm font-semibold text-gray-700 mb-2 text-center">
+                    삭제하려면 <span className="text-red-600">"{memberToDelete.name}"</span>을(를) 입력하세요
+                  </p>
+                  <input
+                    type="text"
+                    value={deleteConfirmName}
+                    onChange={(e) => setDeleteConfirmName(e.target.value)}
+                    placeholder="멤버 이름 입력"
+                    className="w-full px-4 py-3 border-2 border-gray-300 rounded-lg focus:ring-2 focus:ring-red-500 focus:border-transparent text-base text-center"
+                    autoFocus
+                  />
+                </div>
+
                 <div className="flex space-x-3 w-full">
                   <button
                     onClick={() => {
                       setShowDeleteConfirm(false);
                       setMemberToDelete(null);
+                      setDeleteConfirmName('');
                     }}
                     className="flex-1 py-3 rounded-lg font-bold bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors cursor-pointer"
                   >
@@ -820,8 +849,11 @@ export default function Attendance() {
                   </button>
                   <button
                     onClick={handleDelete}
-                    className="flex-1 py-3 rounded-lg font-bold text-white transition-colors cursor-pointer"
-                    style={{ backgroundColor: '#EF5350' }}
+                    disabled={deleteConfirmName !== memberToDelete.name}
+                    className="flex-1 py-3 rounded-lg font-bold text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    style={{
+                      backgroundColor: deleteConfirmName === memberToDelete.name ? '#EF5350' : '#9CA3AF'
+                    }}
                   >
                     삭제
                   </button>
