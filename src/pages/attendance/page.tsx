@@ -1114,7 +1114,7 @@ export default function Attendance() {
 
                   <div>
                     <label className="block text-base font-bold text-gray-700 mb-2">
-                      지역 <span className="text-red-500">*</span>
+                      지역(동까지만 입력) <span className="text-red-500">*</span>
                     </label>
                     <input
                       type="text"
@@ -1122,7 +1122,7 @@ export default function Attendance() {
                       value={formData.region}
                       onChange={(e) => setFormData({ ...formData, region: e.target.value })}
                       className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
-                      placeholder="지역을 입력하세요"
+                      placeholder="예: 역삼동"
                     />
                   </div>
 
