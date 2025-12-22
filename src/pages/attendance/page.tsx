@@ -48,8 +48,30 @@ export default function Attendance() {
   const [memberToDelete, setMemberToDelete] = useState<string | null>(null);
 
   useEffect(() => {
+    migrateZoneLeaders();
     fetchMembers();
   }, []);
+
+  const migrateZoneLeaders = async () => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      if (!user.team_id) return;
+
+      // 구역장들을 일반 재적 멤버로 변경
+      await supabase
+        .from('members')
+        .update({
+          is_zone_leader: false,
+          zone_leader_id: null
+        })
+        .eq('team_id', user.team_id)
+        .eq('is_zone_leader', true);
+
+      console.log('구역장 마이그레이션 완료');
+    } catch (error) {
+      console.error('구역장 마이그레이션 실패:', error);
+    }
+  };
 
   useEffect(() => {
     fetchAttendance();
@@ -343,12 +365,6 @@ export default function Attendance() {
       return;
     }
 
-    // 재적일 때 구역장 필수 검증
-    if (formData.role === 'regular' && !formData.zone_leader_id) {
-      alert('구역장을 선택해주세요');
-      return;
-    }
-
     // 새신자일 때 전도자 필수 검증
     if (formData.role === 'newbie' && !formData.referrer_id) {
       alert('전도자를 선택해주세요');
@@ -374,32 +390,22 @@ export default function Attendance() {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
 
       // 역할에 따른 플래그 설정
-      const is_zone_leader = formData.role === 'zone_leader';
+      const is_zone_leader = false; // 구역장 역할 제거
       const is_newbie = formData.role === 'newbie';
       const is_team_leader = formData.role === 'team_leader';
 
       // zone_leader_id 계산
       let zone_leader_id = null;
 
-      if (formData.role === 'zone_leader' || formData.role === 'team_leader') {
-        // 구역장과 팀장은 zone_leader_id가 없음
+      if (formData.role === 'team_leader') {
+        // 팀장은 zone_leader_id가 없음
         zone_leader_id = null;
       } else if (formData.role === 'regular') {
-        // 재적은 선택한 구역장/팀장
-        zone_leader_id = formData.zone_leader_id;
+        // 재적은 zone_leader_id 없음 (구역장 역할 제거)
+        zone_leader_id = null;
       } else if (formData.role === 'newbie') {
-        // 새신자는 전도자에 따라 자동 계산
-        const referrer = members.find(m => m.id === formData.referrer_id);
-        if (referrer?.is_team_leader) {
-          // 팀장이 전도 → 팀장 직속 (zone_leader_id = null)
-          zone_leader_id = null;
-        } else if (referrer?.is_zone_leader) {
-          // 구역장이 전도 → 해당 구역장 직속
-          zone_leader_id = referrer.id;
-        } else if (referrer) {
-          // 재적이 전도 → 전도자의 구역장 직속
-          zone_leader_id = referrer.zone_leader_id;
-        }
+        // 새신자는 zone_leader_id 없음 (구역장 역할 제거)
+        zone_leader_id = null;
       }
 
       if (editingMember) {
@@ -508,19 +514,6 @@ export default function Attendance() {
   };
 
   const handleDeleteClick = (id: string) => {
-    // 삭제하려는 멤버가 구역장인지 확인
-    const memberToCheck = members.find(m => m.id === id);
-
-    if (memberToCheck?.is_zone_leader) {
-      // 이 구역장에게 소속된 멤버가 있는지 확인
-      const hasMembers = members.some(m => m.zone_leader_id === id);
-
-      if (hasMembers) {
-        alert('이 구역장에게 소속된 멤버가 있어 삭제할 수 없습니다.\n먼저 소속 멤버들을 다른 구역으로 이동하거나 삭제해주세요.');
-        return;
-      }
-    }
-
     // 삭제 확인 모달 표시
     setMemberToDelete(id);
     setShowDeleteConfirm(true);
@@ -569,13 +562,12 @@ export default function Attendance() {
 
     // 역할 결정
     let role = 'regular';
-    if (member.is_zone_leader) {
-      role = 'zone_leader';
-    } else if (member.is_team_leader) {
+    if (member.is_team_leader) {
       role = 'team_leader';
     } else if (member.is_newbie) {
       role = 'newbie';
     }
+    // 구역장은 재적으로 처리 (is_zone_leader는 무시)
 
     // 새신자인 경우 referrer_id 가져오기
     let referrerId = '';
@@ -1051,18 +1043,6 @@ export default function Attendance() {
                     <input
                       type="radio"
                       name="role"
-                      value="zone_leader"
-                      checked={formData.role === 'zone_leader'}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '' })}
-                      className="w-5 h-5 text-primary-600 border-gray-300 focus:ring-primary-500 cursor-pointer"
-                    />
-                    <span className="ml-3 text-base font-semibold text-gray-700">구역장</span>
-                  </label>
-
-                  <label className="flex items-center cursor-pointer">
-                    <input
-                      type="radio"
-                      name="role"
                       value="team_leader"
                       checked={formData.role === 'team_leader'}
                       onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '' })}
@@ -1112,28 +1092,6 @@ export default function Attendance() {
                   placeholder="01012345678"
                 />
               </div>
-
-              {/* 재적인 경우 구역장/팀장 선택 */}
-              {formData.role === 'regular' && (
-                <div>
-                  <label className="block text-base font-bold text-gray-700 mb-2">
-                    구역장/팀장 <span className="text-red-500">*</span>
-                  </label>
-                  <select
-                    required
-                    value={formData.zone_leader_id}
-                    onChange={(e) => setFormData({ ...formData, zone_leader_id: e.target.value })}
-                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base cursor-pointer"
-                  >
-                    <option value="">구역장/팀장을 선택하세요</option>
-                    {members.filter(m => m.is_zone_leader || m.is_team_leader).map(leader => (
-                      <option key={leader.id} value={leader.id}>
-                        {leader.name} {leader.is_team_leader ? '(팀장)' : '(구역장)'}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              )}
 
               {/* 새신자인 경우 추가 정보 입력 */}
               {formData.role === 'newbie' && (
