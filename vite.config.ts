@@ -67,7 +67,7 @@ export default defineConfig({
       dts: true,
     }),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
       includeAssets: ['logo.png'],
       devOptions: {
         enabled: true,
