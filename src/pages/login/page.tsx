@@ -46,21 +46,22 @@ export default function Login() {
     try {
       if (isLogin) {
         // 로그인 로직
-        // 1. users 테이블에서 전화번호로 사용자 찾기
-        const { data: user, error: userError } = await supabase
+        // 1. users 테이블에서 전화번호로 사용자 찾기 (여러 계정 가능)
+        const { data: users, error: userError } = await supabase
           .from('users')
           .select('*')
-          .eq('phone', formData.phone)
-          .single();
+          .eq('phone', formData.phone);
 
-        if (userError || !user) {
+        if (userError || !users || users.length === 0) {
           setError('전화번호 또는 PIN이 올바르지 않습니다');
           return;
         }
 
-        // 2. PIN 확인 (실제로는 bcrypt 비교해야 하지만, 간단히 문자열 비교)
+        // 2. PIN이 일치하는 계정 찾기
         // TODO: 실제 환경에서는 백엔드에서 bcrypt.compare 사용
-        if (user.pin_hash !== formData.pin) {
+        const user = users.find(u => u.pin_hash === formData.pin);
+
+        if (!user) {
           setError('전화번호 또는 PIN이 올바르지 않습니다');
           return;
         }
@@ -79,19 +80,7 @@ export default function Login() {
         navigate('/attendance');
       } else {
         // 회원가입 로직
-        // 1. 전화번호 중복 확인
-        const { data: existingUser } = await supabase
-          .from('users')
-          .select('id')
-          .eq('phone', formData.phone)
-          .single();
-
-        if (existingUser) {
-          setError('이미 등록된 전화번호입니다');
-          return;
-        }
-
-        // 2. 팀 생성 또는 조회
+        // 1. 팀 생성 또는 조회
         let teamId = null;
         // 팀명이 없으면 색상(청팀/백팀)을 팀명으로 사용
         const teamName = formData.teamName || formData.teamColor;
