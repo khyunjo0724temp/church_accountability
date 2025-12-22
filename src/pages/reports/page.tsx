@@ -604,14 +604,21 @@ export default function Reports() {
 
         if (members.length === 0) return;
 
-        const totalMembers = members.length;
-        const presentMembers = members.filter(m =>
+        // 재적 멤버만 (새신자 제외)
+        const regularMembers = members.filter(m => !m.is_newbie);
+        const totalMembers = regularMembers.length;
+
+        // 재적 출석만 (새신자 출석 제외)
+        const presentMembers = regularMembers.filter(m =>
           attendanceData?.some(a => a.member_id === m.id && a.present)
         );
-        const absentMembers = members.filter(m => {
+
+        const absentMembers = regularMembers.filter(m => {
           const attendance = attendanceData?.find(a => a.member_id === m.id);
           return attendance && !attendance.present;
         });
+
+        // 새신자 출석
         const newbieMembers = members.filter(m =>
           m.is_newbie && attendanceData?.some(a => a.member_id === m.id && a.present)
         );
@@ -641,9 +648,22 @@ export default function Reports() {
       });
 
       // 전체 재적 행
-      const totalCount = allMembers?.length || 0;
-      const totalPresent = attendanceData?.filter(a => a.present).length || 0;
-      const totalAbsent = attendanceData?.filter(a => !a.present).length || 0;
+      // 재적 멤버만 (새신자 제외)
+      const regularMembers = allMembers?.filter(m => !m.is_newbie) || [];
+      const totalCount = regularMembers.length;
+
+      // 재적 출석만 (새신자 출석 제외)
+      const totalPresent = regularMembers.filter(m =>
+        attendanceData?.some(a => a.member_id === m.id && a.present)
+      ).length;
+
+      // 재적 결석 (새신자 제외)
+      const totalAbsent = attendanceData?.filter(a => {
+        const member = allMembers?.find(m => m.id === a.member_id);
+        return !a.present && member && !member.is_newbie;
+      }).length || 0;
+
+      // 새신자 출석
       const totalNewbies = allMembers?.filter(m =>
         m.is_newbie && attendanceData?.some(a => a.member_id === m.id && a.present)
       ).length || 0;
