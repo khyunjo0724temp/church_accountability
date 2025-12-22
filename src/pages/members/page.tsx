@@ -17,29 +17,42 @@ interface Member {
 export default function Members() {
   const navigate = useNavigate();
   const [members, setMembers] = useState<Member[]>([]);
-  const [filteredMembers, setFilteredMembers] = useState<Member[]>([]);
-  const [zoneLeaders, setZoneLeaders] = useState<Member[]>([]);
   const [regularMembers, setRegularMembers] = useState<Member[]>([]);
-  const [filter, setFilter] = useState<string>('all');
   const [showAddModal, setShowAddModal] = useState(false);
   const [editingMember, setEditingMember] = useState<Member | null>(null);
   const [formData, setFormData] = useState({
     name: '',
     phone: '',
     is_newbie: false,
-    is_zone_leader: false,
     is_team_leader: false,
-    zone_leader_id: '',
     referrer_id: ''
   });
 
   useEffect(() => {
+    migrateZoneLeaders();
     fetchMembers();
   }, []);
 
-  useEffect(() => {
-    applyFilter();
-  }, [filter, members]);
+  const migrateZoneLeaders = async () => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      if (!user.team_id) return;
+
+      // 구역장들을 일반 재적 멤버로 변경
+      await supabase
+        .from('members')
+        .update({
+          is_zone_leader: false,
+          zone_leader_id: null
+        })
+        .eq('team_id', user.team_id)
+        .eq('is_zone_leader', true);
+
+      console.log('구역장 마이그레이션 완료');
+    } catch (error) {
+      console.error('구역장 마이그레이션 실패:', error);
+    }
+  };
 
   const fetchMembers = async () => {
     try {
@@ -88,24 +101,11 @@ export default function Members() {
 
       setMembers(membersWithInfo);
 
-      // 구역장 목록 추출
-      const leaders = membersWithInfo.filter((m: Member) => m.is_zone_leader);
-      setZoneLeaders(leaders);
-
       // 재적 멤버 목록 (새신자 아닌 사람들)
       const regulars = membersWithInfo.filter((m: Member) => !m.is_newbie);
       setRegularMembers(regulars);
     } catch (error) {
       console.error('멤버 로드 실패:', error);
-    }
-  };
-
-  const applyFilter = () => {
-    if (filter === 'all') {
-      setFilteredMembers(members);
-    } else {
-      // 구역장 ID로 필터링
-      setFilteredMembers(members.filter(m => m.zone_leader_id === filter));
     }
   };
 
@@ -123,9 +123,7 @@ export default function Members() {
             name: formData.name,
             phone: formData.phone,
             is_newbie: formData.is_newbie,
-            is_zone_leader: formData.is_zone_leader,
-            is_team_leader: formData.is_team_leader,
-            zone_leader_id: formData.is_zone_leader || formData.is_team_leader ? null : (formData.zone_leader_id || null)
+            is_team_leader: formData.is_team_leader
           })
           .eq('id', editingMember.id);
 
@@ -168,9 +166,7 @@ export default function Members() {
             name: formData.name,
             phone: formData.phone,
             is_newbie: formData.is_newbie,
-            is_zone_leader: formData.is_zone_leader,
-            is_team_leader: formData.is_team_leader,
-            zone_leader_id: formData.is_zone_leader || formData.is_team_leader ? null : (formData.zone_leader_id || null)
+            is_team_leader: formData.is_team_leader
           });
 
         if (error) {
@@ -212,9 +208,7 @@ export default function Members() {
       name: '',
       phone: '',
       is_newbie: false,
-      is_zone_leader: false,
       is_team_leader: false,
-      zone_leader_id: '',
       referrer_id: ''
     });
     setShowAddModal(true);
@@ -241,9 +235,7 @@ export default function Members() {
       name: member.name,
       phone: member.phone,
       is_newbie: member.is_newbie,
-      is_zone_leader: member.is_zone_leader,
       is_team_leader: member.is_team_leader,
-      zone_leader_id: member.zone_leader_id || '',
       referrer_id: referrerId
     });
     setShowAddModal(true);
@@ -283,7 +275,7 @@ export default function Members() {
         <div className="flex flex-col md:flex-row md:items-center md:justify-between mb-6">
           <div className="mb-4 md:mb-0">
             <h2 className="text-3xl font-bold text-gray-800 mb-2">팀원 목록</h2>
-            <p className="text-gray-600">총 {filteredMembers.length}명</p>
+            <p className="text-gray-600">총 {members.length}명</p>
           </div>
           <button
             onClick={openAddModal}
@@ -294,36 +286,8 @@ export default function Members() {
           </button>
         </div>
 
-        <div className="bg-white rounded-xl shadow-md p-6 mb-6">
-          <div className="flex flex-wrap gap-3">
-            <button
-              onClick={() => setFilter('all')}
-              className={`px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                filter === 'all'
-                  ? 'bg-teal-600 text-white'
-                  : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              전체
-            </button>
-            {zoneLeaders.map((leader) => (
-              <button
-                key={leader.id}
-                onClick={() => setFilter(leader.id)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors cursor-pointer whitespace-nowrap ${
-                  filter === leader.id
-                    ? 'bg-teal-600 text-white'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {leader.name}
-              </button>
-            ))}
-          </div>
-        </div>
-
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredMembers.map((member) => (
+          {members.map((member) => (
             <div key={member.id} className="bg-white rounded-xl shadow-md p-4 hover:shadow-lg transition-shadow">
               <div className="flex items-center justify-between">
                 <div className="flex-1">
@@ -334,11 +298,6 @@ export default function Members() {
                         팀장
                       </span>
                     )}
-                    {member.is_zone_leader && (
-                      <span className="px-2 py-0.5 bg-blue-100 text-blue-700 text-xs font-medium rounded whitespace-nowrap">
-                        구역장
-                      </span>
-                    )}
                     {member.is_newbie && (
                       <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 text-xs font-medium rounded-full whitespace-nowrap">
                         새신자
@@ -347,12 +306,6 @@ export default function Members() {
                   </div>
 
                   <div className="space-y-1">
-                    {!member.is_zone_leader && !member.is_team_leader && member.zone_leader_name && (
-                      <div className="flex items-center text-xs text-gray-600">
-                        <i className="ri-user-star-line mr-1"></i>
-                        <span>구역장: {member.zone_leader_name}</span>
-                      </div>
-                    )}
                     {member.is_newbie && member.referrer_name && (
                       <div className="flex items-center text-xs text-emerald-600">
                         <i className="ri-user-heart-line mr-1"></i>
@@ -383,7 +336,7 @@ export default function Members() {
           ))}
         </div>
 
-        {filteredMembers.length === 0 && (
+        {members.length === 0 && (
           <div className="bg-white rounded-xl shadow-md p-12 text-center">
             <i className="ri-user-line text-6xl text-gray-300 mb-4"></i>
             <p className="text-gray-600">등록된 멤버가 없습니다</p>
@@ -428,92 +381,63 @@ export default function Members() {
               </div>
 
               <div className="pt-2 space-y-3 border-t border-gray-200">
-                <p className="text-sm font-semibold text-gray-700">역할</p>
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="is_team_leader"
-                    checked={formData.is_team_leader}
-                    onChange={(e) => setFormData({ ...formData, is_team_leader: e.target.checked, is_zone_leader: e.target.checked ? false : formData.is_zone_leader, zone_leader_id: e.target.checked ? '' : formData.zone_leader_id })}
-                    className="w-5 h-5 text-purple-600 border-gray-300 rounded focus:ring-purple-500 cursor-pointer"
-                  />
-                  <label htmlFor="is_team_leader" className="ml-3 text-sm font-medium text-gray-700 cursor-pointer">
-                    팀장
+                <p className="text-sm font-semibold text-gray-700">역할 <span className="text-red-500">*</span></p>
+                <div className="space-y-2">
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name="role"
+                      checked={!formData.is_newbie && !formData.is_team_leader}
+                      onChange={() => setFormData({ ...formData, is_newbie: false, is_team_leader: false, referrer_id: '' })}
+                      className="w-5 h-5 text-teal-600 border-gray-300 focus:ring-teal-500 cursor-pointer"
+                    />
+                    <span className="ml-3 text-sm font-medium text-gray-700">재적</span>
+                  </label>
+
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name="role"
+                      checked={formData.is_team_leader}
+                      onChange={() => setFormData({ ...formData, is_team_leader: true, is_newbie: false, referrer_id: '' })}
+                      className="w-5 h-5 text-purple-600 border-gray-300 focus:ring-purple-500 cursor-pointer"
+                    />
+                    <span className="ml-3 text-sm font-medium text-gray-700">팀장</span>
+                  </label>
+
+                  <label className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      name="role"
+                      checked={formData.is_newbie}
+                      onChange={() => setFormData({ ...formData, is_newbie: true, is_team_leader: false })}
+                      className="w-5 h-5 text-emerald-600 border-gray-300 focus:ring-emerald-500 cursor-pointer"
+                    />
+                    <span className="ml-3 text-sm font-medium text-gray-700">새신자</span>
                   </label>
                 </div>
-
-                {!formData.is_team_leader && (
-                  <div className="flex items-center">
-                    <input
-                      type="checkbox"
-                      id="is_zone_leader"
-                      checked={formData.is_zone_leader}
-                      onChange={(e) => setFormData({ ...formData, is_zone_leader: e.target.checked, zone_leader_id: e.target.checked ? '' : formData.zone_leader_id })}
-                      className="w-5 h-5 text-blue-600 border-gray-300 rounded focus:ring-blue-500 cursor-pointer"
-                    />
-                    <label htmlFor="is_zone_leader" className="ml-3 text-sm font-medium text-gray-700 cursor-pointer">
-                      구역장
-                    </label>
-                  </div>
-                )}
               </div>
 
-              {!formData.is_zone_leader && !formData.is_team_leader && (
+              {formData.is_newbie && (
                 <div>
                   <label className="block text-sm font-semibold text-gray-700 mb-2">
-                    소속 구역장 <span className="text-red-500">*</span>
+                    전도자 <span className="text-red-500">*</span>
                   </label>
                   <select
-                    required={!formData.is_zone_leader && !formData.is_team_leader}
-                    value={formData.zone_leader_id}
-                    onChange={(e) => setFormData({ ...formData, zone_leader_id: e.target.value })}
+                    required={formData.is_newbie}
+                    value={formData.referrer_id}
+                    onChange={(e) => setFormData({ ...formData, referrer_id: e.target.value })}
                     className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm cursor-pointer"
                   >
-                    <option value="">구역장을 선택하세요</option>
-                    {zoneLeaders.map((leader) => (
-                      <option key={leader.id} value={leader.id}>
-                        {leader.name}
+                    <option value="">전도자를 선택하세요</option>
+                    {regularMembers.map((member) => (
+                      <option key={member.id} value={member.id}>
+                        {member.name}{member.is_team_leader ? ' (팀장)' : ''}
                       </option>
                     ))}
                   </select>
                 </div>
               )}
-
-              <div className="pt-2 space-y-3 border-t border-gray-200">
-                <div className="flex items-center">
-                  <input
-                    type="checkbox"
-                    id="is_newbie"
-                    checked={formData.is_newbie}
-                    onChange={(e) => setFormData({ ...formData, is_newbie: e.target.checked })}
-                    className="w-5 h-5 text-emerald-600 border-gray-300 rounded focus:ring-emerald-500 cursor-pointer"
-                  />
-                  <label htmlFor="is_newbie" className="ml-3 text-sm font-medium text-gray-700 cursor-pointer">
-                    새신자
-                  </label>
-                </div>
-
-                {formData.is_newbie && (
-                  <div className="pl-8">
-                    <label className="block text-sm font-semibold text-gray-700 mb-2">
-                      전도자 <span className="text-red-500">*</span>
-                    </label>
-                    <select
-                      required={formData.is_newbie}
-                      value={formData.referrer_id}
-                      onChange={(e) => setFormData({ ...formData, referrer_id: e.target.value })}
-                      className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-teal-500 focus:border-transparent text-sm cursor-pointer"
-                    >
-                      <option value="">전도자를 선택하세요</option>
-                      {regularMembers.map((member) => (
-                        <option key={member.id} value={member.id}>
-                          {member.name}{member.is_team_leader ? ' (팀장)' : member.is_zone_leader ? ' (구역장)' : ''}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                )}
-              </div>
 
               <div className="flex space-x-3 pt-6 border-t border-gray-200">
                 <button
