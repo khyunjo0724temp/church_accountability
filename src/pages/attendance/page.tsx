@@ -372,23 +372,33 @@ export default function Attendance() {
       return;
     }
 
-    // 이름 중복 검증
-    const duplicateName = members.find(m => {
-      // 수정할 때는 자기 자신은 제외
-      if (editingMember && m.id === editingMember.id) {
-        return false;
-      }
-      // 같은 이름이 있는지 확인
-      return m.name === formData.name;
-    });
-
-    if (duplicateName) {
-      alert(`같은 이름 "${formData.name}"이(가) 이미 존재합니다.\n다른 이름을 사용하거나 구별할 수 있는 표시를 추가해주세요.\n예: ${formData.name}A, ${formData.name}B`);
-      return;
-    }
-
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
+
+      // 데이터베이스에서 직접 중복 이름 체크
+      const { data: existingMembers, error: checkError } = await supabase
+        .from('members')
+        .select('id, name')
+        .eq('team_id', user.team_id)
+        .eq('name', formData.name.trim());
+
+      if (checkError) {
+        console.error('중복 체크 실패:', checkError);
+        alert('중복 확인 중 오류가 발생했습니다');
+        return;
+      }
+
+      // 수정이 아니거나, 수정인데 다른 멤버와 이름이 같은 경우
+      if (existingMembers && existingMembers.length > 0) {
+        const isDuplicate = editingMember
+          ? existingMembers.some(m => m.id !== editingMember.id)
+          : true;
+
+        if (isDuplicate) {
+          alert(`같은 이름 "${formData.name}"이(가) 이미 존재합니다.\n다른 이름을 사용하거나 구별할 수 있는 표시를 추가해주세요.\n예: ${formData.name}A, ${formData.name}B`);
+          return;
+        }
+      }
 
       // 역할에 따른 플래그 설정
       const is_zone_leader = false; // 구역장 역할 제거
