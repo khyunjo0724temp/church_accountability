@@ -21,6 +21,7 @@ const performUpdate = registerSW({
         if (updatePending) {
           console.log('유휴 상태 감지: 앱을 업데이트합니다.');
           performUpdate();
+          window.location.reload();
         }
       }, 30000); // 30초
     };
@@ -40,6 +41,7 @@ const performUpdate = registerSW({
       if (updatePending) {
         console.log('페이지 전환 감지: 앱을 업데이트합니다.');
         performUpdate();
+        window.location.reload();
       }
       return originalPushState.apply(this, args);
     };
@@ -48,6 +50,7 @@ const performUpdate = registerSW({
       if (updatePending) {
         console.log('페이지 전환 감지: 앱을 업데이트합니다.');
         performUpdate();
+        window.location.reload();
       }
       return originalReplaceState.apply(this, args);
     };
