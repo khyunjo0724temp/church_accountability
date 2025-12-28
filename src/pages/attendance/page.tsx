@@ -624,40 +624,24 @@ export default function Attendance() {
     setEditingMember(null);
   };
 
-  // 멤버를 그룹화
-  // 새신자를 정렬: 전도자별로 그룹화하고, 출석한 사람이 위로 (저장된 출석 상태 기준)
-  const newbieMembers = (() => {
-    const newbies = members.filter(m => m.is_newbie);
+  // 공통 정렬 함수: 출석한 사람이 먼저, 그 다음 이름순
+  const sortByAttendance = (membersList: Member[]) => {
+    return [...membersList].sort((a, b) => {
+      const aPresent = savedAttendance.get(a.id) ? 1 : 0;
+      const bPresent = savedAttendance.get(b.id) ? 1 : 0;
 
-    // 전도자별로 그룹화
-    const byReferrer = new Map<string, Member[]>();
-    newbies.forEach(member => {
-      const referrerKey = member.referrer_name || '전도자 없음';
-      if (!byReferrer.has(referrerKey)) {
-        byReferrer.set(referrerKey, []);
+      // 출석 여부가 다르면 출석한 사람 먼저
+      if (bPresent !== aPresent) {
+        return bPresent - aPresent;
       }
-      byReferrer.get(referrerKey)!.push(member);
-    });
 
-    // 각 그룹 내에서 출석한 사람을 먼저 정렬 (저장된 출석 상태 기준)
-    byReferrer.forEach((group) => {
-      group.sort((a, b) => {
-        const aPresent = savedAttendance.get(a.id) ? 1 : 0;
-        const bPresent = savedAttendance.get(b.id) ? 1 : 0;
-        return bPresent - aPresent; // 출석한 사람이 위로
-      });
+      // 출석 여부가 같으면 이름순
+      return a.name.localeCompare(b.name, 'ko-KR');
     });
+  };
 
-    // 그룹을 출석자 수가 많은 순서로 정렬 (저장된 출석 상태 기준)
-    const sortedGroups = Array.from(byReferrer.entries()).sort((a, b) => {
-      const aAttendCount = a[1].filter(m => savedAttendance.get(m.id)).length;
-      const bAttendCount = b[1].filter(m => savedAttendance.get(m.id)).length;
-      return bAttendCount - aAttendCount;
-    });
-
-    // 정렬된 그룹을 하나의 배열로 합치기
-    return sortedGroups.flatMap(([_, group]) => group);
-  })();
+  // 새신자를 정렬
+  const newbieMembers = sortByAttendance(members.filter(m => m.is_newbie));
   // 팀장 섹션: 팀장 본인 + 팀장이 전도한 멤버들 (구역장에 배정되지 않은 재적)
   const teamLeaderMembers = members.filter(m =>
     !m.is_newbie && (m.is_team_leader || (!m.zone_leader_id && !m.is_zone_leader))
@@ -948,11 +932,11 @@ export default function Attendance() {
                   let displayMembers: Member[] = [];
 
                   if (activeTab === 'all') {
-                    displayMembers = members;
+                    displayMembers = sortByAttendance(members);
                   } else if (activeTab === 'newbies') {
                     displayMembers = newbieMembers;
                   } else if (activeTab === 'regular') {
-                    displayMembers = members.filter(m => !m.is_newbie);
+                    displayMembers = sortByAttendance(members.filter(m => !m.is_newbie));
                   }
 
                   return displayMembers.map((member) => (
