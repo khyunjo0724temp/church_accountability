@@ -751,6 +751,22 @@ export default function Attendance() {
               <span className="text-gray-900">출석 & 전도</span>
             </button>
           </div>
+
+          {/* 로그아웃 버튼 */}
+          <div className="absolute bottom-6 left-6 right-6">
+            <button
+              onClick={() => {
+                localStorage.removeItem('user');
+                localStorage.removeItem('access_token');
+                localStorage.removeItem('remember_device');
+                navigate('/login');
+              }}
+              className="w-full flex items-center justify-center space-x-2 px-4 py-3 bg-red-50 hover:bg-red-100 text-red-600 rounded-lg font-semibold cursor-pointer transition-colors"
+            >
+              <i className="ri-logout-box-line text-2xl"></i>
+              <span>로그아웃</span>
+            </button>
+          </div>
         </div>
       </div>
 
