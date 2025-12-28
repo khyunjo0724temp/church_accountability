@@ -1165,9 +1165,8 @@ export default function Reports() {
                     navigate('/attendance');
                     setSidebarOpen(false);
                   }}
-                  className="w-full flex items-center space-x-3 px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors"
+                  className="w-full flex items-center justify-center px-4 py-3 hover:bg-gray-50 text-gray-700 rounded-lg font-semibold cursor-pointer whitespace-nowrap transition-colors"
                 >
-                  <i className="ri-checkbox-circle-line text-2xl text-gray-600"></i>
                   <span className="text-gray-900">출석 체크</span>
                 </button>
                 <button
@@ -1175,10 +1174,9 @@ export default function Reports() {
                     navigate('/reports');
                     setSidebarOpen(false);
                   }}
-                  className="w-full flex items-center space-x-3 px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors"
+                  className="w-full flex items-center justify-center px-4 py-3 rounded-lg font-bold cursor-pointer whitespace-nowrap transition-colors"
                   style={{ backgroundColor: '#1E88E5', color: 'white' }}
                 >
-                  <i className="ri-bar-chart-line text-2xl" style={{ color: 'white' }}></i>
                   <span style={{ color: 'white' }}>출석 & 전도</span>
                 </button>
               </>
