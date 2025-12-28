@@ -47,11 +47,24 @@ export default function Attendance() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [memberToDelete, setMemberToDelete] = useState<{ id: string; name: string } | null>(null);
   const [deleteConfirmName, setDeleteConfirmName] = useState('');
+  const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   useEffect(() => {
     migrateZoneLeaders();
     fetchMembers();
   }, []);
+
+  // 토스트 자동 숨김
+  useEffect(() => {
+    if (toast) {
+      const timer = setTimeout(() => {
+        setToast(null);
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [toast]);
 
   const migrateZoneLeaders = async () => {
     try {
@@ -372,6 +385,7 @@ export default function Attendance() {
       return;
     }
 
+    setIsSubmitting(true);
     try {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
 
@@ -384,7 +398,8 @@ export default function Attendance() {
 
       if (checkError) {
         console.error('중복 체크 실패:', checkError);
-        alert('중복 확인 중 오류가 발생했습니다');
+        setToast({ message: '중복 확인 중 오류가 발생했습니다', type: 'error' });
+        setIsSubmitting(false);
         return;
       }
 
@@ -395,7 +410,8 @@ export default function Attendance() {
           : true;
 
         if (isDuplicate) {
-          alert(`같은 이름 "${formData.name}"이(가) 이미 존재합니다.\n다른 이름을 사용하거나 구별할 수 있는 표시를 추가해주세요.\n예: ${formData.name}A, ${formData.name}B`);
+          setToast({ message: `같은 이름 "${formData.name}"이(가) 이미 존재합니다`, type: 'error' });
+          setIsSubmitting(false);
           return;
         }
       }
@@ -444,6 +460,7 @@ export default function Attendance() {
 
         if (error) {
           console.error('수정 실패:', error);
+          setToast({ message: '멤버 수정에 실패했습니다', type: 'error' });
           return;
         }
 
@@ -468,6 +485,7 @@ export default function Attendance() {
             });
         }
 
+        setToast({ message: '멤버 정보가 수정되었습니다', type: 'success' });
         fetchMembers();
         closeModal();
       } else {
@@ -497,6 +515,7 @@ export default function Attendance() {
 
         if (error) {
           console.error('추가 실패:', error);
+          setToast({ message: '멤버 추가에 실패했습니다', type: 'error' });
           return;
         }
 
@@ -516,11 +535,15 @@ export default function Attendance() {
             });
         }
 
+        setToast({ message: '멤버가 추가되었습니다', type: 'success' });
         fetchMembers();
         closeModal();
       }
     } catch (error) {
       console.error('저장 실패:', error);
+      setToast({ message: '저장 중 오류가 발생했습니다', type: 'error' });
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -540,10 +563,11 @@ export default function Attendance() {
 
     // 이름 확인
     if (deleteConfirmName !== memberToDelete.name) {
-      alert('멤버 이름이 일치하지 않습니다');
+      setToast({ message: '멤버 이름이 일치하지 않습니다', type: 'error' });
       return;
     }
 
+    setIsDeleting(true);
     try {
       const { error } = await supabase
         .from('members')
@@ -552,9 +576,11 @@ export default function Attendance() {
 
       if (error) {
         console.error('삭제 실패:', error);
+        setToast({ message: '멤버 삭제에 실패했습니다', type: 'error' });
         return;
       }
 
+      setToast({ message: '멤버가 삭제되었습니다', type: 'success' });
       setShowDeleteConfirm(false);
       setMemberToDelete(null);
       setDeleteConfirmName('');
@@ -562,6 +588,9 @@ export default function Attendance() {
       closeModal();
     } catch (error) {
       console.error('삭제 실패:', error);
+      setToast({ message: '삭제 중 오류가 발생했습니다', type: 'error' });
+    } finally {
+      setIsDeleting(false);
     }
   };
 
@@ -859,13 +888,23 @@ export default function Attendance() {
                   </button>
                   <button
                     onClick={handleDelete}
-                    disabled={deleteConfirmName !== memberToDelete.name}
-                    className="flex-1 py-3 rounded-lg font-bold text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+                    disabled={deleteConfirmName !== memberToDelete.name || isDeleting}
+                    className="flex-1 py-3 rounded-lg font-bold text-white transition-colors cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                     style={{
                       backgroundColor: deleteConfirmName === memberToDelete.name ? '#EF5350' : '#9CA3AF'
                     }}
                   >
-                    삭제
+                    {isDeleting ? (
+                      <>
+                        <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                        삭제 중...
+                      </>
+                    ) : (
+                      '삭제'
+                    )}
                   </button>
                 </div>
               </div>
@@ -1225,14 +1264,43 @@ export default function Attendance() {
                 )}
                 <button
                   type="submit"
-                  className="flex-1 font-bold py-3 rounded-xl transition-colors cursor-pointer whitespace-nowrap"
+                  disabled={isSubmitting}
+                  className="flex-1 font-bold py-3 rounded-xl transition-colors cursor-pointer whitespace-nowrap disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center"
                   style={{ backgroundColor: '#1E88E5', color: 'white' }}
                 >
-                  {editingMember ? '수정' : '추가'}
+                  {isSubmitting ? (
+                    <>
+                      <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                      </svg>
+                      {editingMember ? '수정 중...' : '추가 중...'}
+                    </>
+                  ) : (
+                    editingMember ? '수정' : '추가'
+                  )}
                 </button>
               </div>
             </form>
           </div>
+        </div>
+      )}
+
+      {/* 토스트 알림 */}
+      {toast && (
+        <div
+          className="fixed top-4 left-1/2 transform -translate-x-1/2 z-[70] px-6 py-4 rounded-lg shadow-lg flex items-center space-x-3 animate-[slideDown_0.3s_ease-out]"
+          style={{
+            backgroundColor: toast.type === 'success' ? '#4CAF50' : '#EF5350',
+            color: 'white'
+          }}
+        >
+          {toast.type === 'success' ? (
+            <i className="ri-checkbox-circle-line text-2xl"></i>
+          ) : (
+            <i className="ri-error-warning-line text-2xl"></i>
+          )}
+          <span className="font-semibold text-base">{toast.message}</span>
         </div>
       )}
     </div>
