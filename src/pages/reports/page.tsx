@@ -1341,31 +1341,6 @@ export default function Reports() {
                 </div>
               </div>
 
-              {/* 새신자 출석 */}
-              <div
-                className="flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50/50 transition-all cursor-pointer"
-                onClick={() => {
-                  setListModalData({
-                    title: `${formatTitleDate(selectedDate)} 새신자 출석(${teamName})`,
-                    members: reportData.weeklyAttendance?.newbieAttendees || []
-                  });
-                  setShowListModal(true);
-                }}
-              >
-                <div className="flex items-center space-x-4">
-                  <div className="w-10 h-10 rounded-2xl bg-green-50/50 flex items-center justify-center">
-                    <i className="ri-user-add-line text-xl text-green-600"></i>
-                  </div>
-                  <span className="text-lg font-semibold text-gray-700">새신자 출석</span>
-                </div>
-                <div className="flex items-center space-x-2">
-                  <span className="text-3xl font-bold text-gray-900">
-                    {reportData.weeklyAttendance.newbieAttendance || 0}
-                  </span>
-                  <i className="ri-arrow-right-s-line text-2xl text-gray-400"></i>
-                </div>
-              </div>
-
               {/* 재적 결석 */}
               <div
                 className="flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50/50 transition-all cursor-pointer"
@@ -1386,6 +1361,31 @@ export default function Reports() {
                 <div className="flex items-center space-x-2">
                   <span className="text-3xl font-bold text-gray-900">
                     {reportData.weeklyAttendance.regularAbsent || 0}
+                  </span>
+                  <i className="ri-arrow-right-s-line text-2xl text-gray-400"></i>
+                </div>
+              </div>
+
+              {/* 새신자 출석 */}
+              <div
+                className="flex items-center justify-between p-4 rounded-2xl hover:bg-gray-50/50 transition-all cursor-pointer"
+                onClick={() => {
+                  setListModalData({
+                    title: `${formatTitleDate(selectedDate)} 새신자 출석(${teamName})`,
+                    members: reportData.weeklyAttendance?.newbieAttendees || []
+                  });
+                  setShowListModal(true);
+                }}
+              >
+                <div className="flex items-center space-x-4">
+                  <div className="w-10 h-10 rounded-2xl bg-green-50/50 flex items-center justify-center">
+                    <i className="ri-user-add-line text-xl text-green-600"></i>
+                  </div>
+                  <span className="text-lg font-semibold text-gray-700">새신자 출석</span>
+                </div>
+                <div className="flex items-center space-x-2">
+                  <span className="text-3xl font-bold text-gray-900">
+                    {reportData.weeklyAttendance.newbieAttendance || 0}
                   </span>
                   <i className="ri-arrow-right-s-line text-2xl text-gray-400"></i>
                 </div>
