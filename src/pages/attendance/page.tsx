@@ -51,6 +51,7 @@ export default function Attendance() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [totalAttendanceCounts, setTotalAttendanceCounts] = useState<Map<string, number>>(new Map());
+  const [loadingAttendanceCounts, setLoadingAttendanceCounts] = useState(false);
 
   useEffect(() => {
     migrateZoneLeaders();
@@ -136,8 +137,12 @@ export default function Attendance() {
 
   const fetchTotalAttendanceCounts = async () => {
     try {
+      setLoadingAttendanceCounts(true);
       const user = JSON.parse(localStorage.getItem('user') || '{}');
-      if (!user.team_id) return;
+      if (!user.team_id) {
+        setLoadingAttendanceCounts(false);
+        return;
+      }
 
       // 새신자들의 총 출석 횟수 계산 (선택된 날짜까지)
       const newbies = members.filter(m => m.is_newbie);
@@ -161,8 +166,10 @@ export default function Attendance() {
       }
 
       setTotalAttendanceCounts(counts);
+      setLoadingAttendanceCounts(false);
     } catch (error) {
       console.error('총 출석 횟수 조회 실패:', error);
+      setLoadingAttendanceCounts(false);
     }
   };
 
@@ -863,7 +870,7 @@ export default function Attendance() {
           </div>
         </div>
 
-        {loadingAttendance && (
+        {(loadingAttendance || loadingAttendanceCounts) && (
           <div className="fixed inset-0 bg-white bg-opacity-90 flex items-center justify-center z-50">
             <div className="flex flex-col items-center space-y-3">
               <i className="ri-loader-4-line text-5xl animate-spin" style={{ color: '#1E88E5' }}></i>
