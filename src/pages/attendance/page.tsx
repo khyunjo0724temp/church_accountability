@@ -50,11 +50,18 @@ export default function Attendance() {
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [totalAttendanceCounts, setTotalAttendanceCounts] = useState<Map<string, number>>(new Map());
 
   useEffect(() => {
     migrateZoneLeaders();
     fetchMembers();
   }, []);
+
+  useEffect(() => {
+    if (members.length > 0) {
+      fetchTotalAttendanceCounts();
+    }
+  }, [members]);
 
   // 토스트 자동 숨김
   useEffect(() => {
@@ -125,6 +132,36 @@ export default function Attendance() {
     const newDate = new Date(selectedDate);
     newDate.setDate(newDate.getDate() + 7);
     setSelectedDate(newDate);
+  };
+
+  const fetchTotalAttendanceCounts = async () => {
+    try {
+      const user = JSON.parse(localStorage.getItem('user') || '{}');
+      if (!user.team_id) return;
+
+      // 새신자들의 총 출석 횟수 계산
+      const newbies = members.filter(m => m.is_newbie);
+      const counts = new Map<string, number>();
+
+      for (const newbie of newbies) {
+        const { data, error } = await supabase
+          .from('attendance_records')
+          .select('*')
+          .eq('member_id', newbie.id)
+          .eq('present', true);
+
+        if (error) {
+          console.error('출석 횟수 조회 실패:', error);
+          continue;
+        }
+
+        counts.set(newbie.id, data?.length || 0);
+      }
+
+      setTotalAttendanceCounts(counts);
+    } catch (error) {
+      console.error('총 출석 횟수 조회 실패:', error);
+    }
   };
 
   const fetchMembers = async () => {
@@ -421,6 +458,9 @@ export default function Attendance() {
       const is_newbie = formData.role === 'newbie';
       const is_team_leader = formData.role === 'team_leader';
 
+      // 새신자는 전화번호 없음
+      const phoneNumber = is_newbie ? '' : formData.phone;
+
       // zone_leader_id 계산
       let zone_leader_id = null;
 
@@ -439,7 +479,7 @@ export default function Attendance() {
         // 수정
         const updateData: any = {
           name: formData.name,
-          phone: formData.phone,
+          phone: phoneNumber,
           is_newbie: is_newbie,
           is_zone_leader: is_zone_leader,
           is_team_leader: is_team_leader,
@@ -493,7 +533,7 @@ export default function Attendance() {
         const insertData: any = {
           team_id: user.team_id,
           name: formData.name,
-          phone: formData.phone,
+          phone: phoneNumber,
           is_newbie: is_newbie,
           is_zone_leader: is_zone_leader,
           is_team_leader: is_team_leader,
@@ -1003,7 +1043,14 @@ export default function Attendance() {
                         ></i>
                       </div>
                       <div className="flex-1">
-                        <p className="font-semibold text-gray-800">{member.name}</p>
+                        <p className="font-semibold text-gray-800">
+                          {member.name}
+                          {member.is_newbie && (
+                            <span className="ml-2 text-sm font-normal text-gray-600">
+                              총 출석: {totalAttendanceCounts.get(member.id) || 0}회
+                            </span>
+                          )}
+                        </p>
                       </div>
                     </div>
                     <div className="flex items-center space-x-2">
@@ -1114,7 +1161,7 @@ export default function Attendance() {
                       name="role"
                       value="regular"
                       checked={formData.role === 'regular'}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '' })}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '', phone: formData.phone })}
                       className="w-5 h-5 text-primary-600 border-gray-300 focus:ring-primary-500 cursor-pointer"
                     />
                     <span className="ml-3 text-base font-semibold text-gray-700">재적</span>
@@ -1126,7 +1173,7 @@ export default function Attendance() {
                       name="role"
                       value="team_leader"
                       checked={formData.role === 'team_leader'}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '' })}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '', phone: formData.phone })}
                       className="w-5 h-5 text-primary-600 border-gray-300 focus:ring-primary-500 cursor-pointer"
                     />
                     <span className="ml-3 text-base font-semibold text-gray-700">팀장</span>
@@ -1138,7 +1185,7 @@ export default function Attendance() {
                       name="role"
                       value="newbie"
                       checked={formData.role === 'newbie'}
-                      onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '' })}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.value, zone_leader_id: '', referrer_id: '', phone: '' })}
                       className="w-5 h-5 text-primary-600 border-gray-300 focus:ring-primary-500 cursor-pointer"
                     />
                     <span className="ml-3 text-base font-semibold text-gray-700">새신자</span>
@@ -1160,19 +1207,22 @@ export default function Attendance() {
                 />
               </div>
 
-              <div>
-                <label className="block text-base font-bold text-gray-700 mb-2">
-                  전화번호 <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="tel"
-                  required
-                  value={formData.phone}
-                  onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/[^0-9]/g, '') })}
-                  className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
-                  placeholder="01012345678"
-                />
-              </div>
+              {/* 새신자가 아닌 경우에만 전화번호 입력 */}
+              {formData.role !== 'newbie' && (
+                <div>
+                  <label className="block text-base font-bold text-gray-700 mb-2">
+                    전화번호 <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    value={formData.phone}
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value.replace(/[^0-9]/g, '') })}
+                    className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-primary-500 focus:border-transparent text-base"
+                    placeholder="01012345678"
+                  />
+                </div>
+              )}
 
               {/* 새신자인 경우 추가 정보 입력 */}
               {formData.role === 'newbie' && (
