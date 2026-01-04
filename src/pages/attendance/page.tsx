@@ -61,7 +61,7 @@ export default function Attendance() {
     if (members.length > 0) {
       fetchTotalAttendanceCounts();
     }
-  }, [members]);
+  }, [members, selectedDate]);
 
   // 토스트 자동 숨김
   useEffect(() => {
@@ -139,16 +139,18 @@ export default function Attendance() {
       const user = JSON.parse(localStorage.getItem('user') || '{}');
       if (!user.team_id) return;
 
-      // 새신자들의 총 출석 횟수 계산
+      // 새신자들의 총 출석 횟수 계산 (선택된 날짜까지)
       const newbies = members.filter(m => m.is_newbie);
       const counts = new Map<string, number>();
+      const selectedDateStr = formatDate(selectedDate);
 
       for (const newbie of newbies) {
         const { data, error } = await supabase
           .from('attendance_records')
           .select('*')
           .eq('member_id', newbie.id)
-          .eq('present', true);
+          .eq('present', true)
+          .lte('week_start_date', selectedDateStr);
 
         if (error) {
           console.error('출석 횟수 조회 실패:', error);
