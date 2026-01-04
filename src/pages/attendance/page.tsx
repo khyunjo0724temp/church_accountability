@@ -146,24 +146,34 @@ export default function Attendance() {
 
       // 새신자들의 총 출석 횟수 계산 (선택된 날짜까지)
       const newbies = members.filter(m => m.is_newbie);
+      if (newbies.length === 0) {
+        setLoadingAttendanceCounts(false);
+        return;
+      }
+
       const counts = new Map<string, number>();
       const selectedDateStr = formatDate(selectedDate);
+      const newbieIds = newbies.map(n => n.id);
 
-      for (const newbie of newbies) {
-        const { data, error } = await supabase
-          .from('attendance_records')
-          .select('*')
-          .eq('member_id', newbie.id)
-          .eq('present', true)
-          .lte('week_start_date', selectedDateStr);
+      // 한 번의 쿼리로 모든 새신자의 출석 기록 가져오기
+      const { data, error } = await supabase
+        .from('attendance_records')
+        .select('member_id')
+        .in('member_id', newbieIds)
+        .eq('present', true)
+        .lte('week_start_date', selectedDateStr);
 
-        if (error) {
-          console.error('출석 횟수 조회 실패:', error);
-          continue;
-        }
-
-        counts.set(newbie.id, data?.length || 0);
+      if (error) {
+        console.error('출석 횟수 조회 실패:', error);
+        setLoadingAttendanceCounts(false);
+        return;
       }
+
+      // 각 새신자별로 출석 횟수 카운트
+      newbies.forEach(newbie => {
+        const count = data?.filter(record => record.member_id === newbie.id).length || 0;
+        counts.set(newbie.id, count);
+      });
 
       setTotalAttendanceCounts(counts);
       setLoadingAttendanceCounts(false);
